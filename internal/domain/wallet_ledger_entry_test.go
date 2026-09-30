@@ -1,0 +1,233 @@
+package domain
+
+import (
+	"errors"
+	"testing"
+	"time"
+)
+
+func TestNewWalletLedgerEntryCreatesValidCredit(t *testing.T) {
+	t.Parallel()
+
+	money, err := NewMoney("25.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for money: %v", err)
+	}
+
+	balanceBefore, err := NewMoney("100.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance before: %v", err)
+	}
+
+	balanceAfter, err := NewMoney("125.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance after: %v", err)
+	}
+
+	createdAt := time.Date(2026, time.September, 30, 15, 0, 0, 0, time.UTC)
+	entryID := "0192f300-27dd-7d3f-8071-5f8685deef37"
+	walletID := "0192f291-27dd-7d3f-8071-5f8685deef37"
+	transactionID := "0192f298-345e-7e38-af88-e43f851a819d"
+
+	entry, err := NewWalletLedgerEntry(
+		entryID,
+		walletID,
+		transactionID,
+		LedgerDirectionCredit,
+		money,
+		balanceBefore,
+		balanceAfter,
+		createdAt,
+	)
+	if err != nil {
+		t.Fatalf("NewWalletLedgerEntry() unexpected error: %v", err)
+	}
+
+	if got := entry.ID(); got != entryID {
+		t.Errorf("WalletLedgerEntry.ID() = %q, want %q", got, entryID)
+	}
+
+	if got := entry.WalletID(); got != walletID {
+		t.Errorf("WalletLedgerEntry.WalletID() = %q, want %q", got, walletID)
+	}
+
+	if got := entry.TransactionID(); got != transactionID {
+		t.Errorf("WalletLedgerEntry.TransactionID() = %q, want %q", got, transactionID)
+	}
+
+	if got := entry.Direction(); got != LedgerDirectionCredit {
+		t.Errorf("WalletLedgerEntry.Direction() = %q, want %q", got, LedgerDirectionCredit)
+	}
+
+	if got, want := entry.Money().Amount(), "25.00"; got != want {
+		t.Errorf("WalletLedgerEntry.Money().Amount() = %q, want %q", got, want)
+	}
+
+	if got, want := entry.BalanceBefore().Amount(), "100.00"; got != want {
+		t.Errorf("WalletLedgerEntry.BalanceBefore().Amount() = %q, want %q", got, want)
+	}
+
+	if got, want := entry.BalanceAfter().Amount(), "125.00"; got != want {
+		t.Errorf("WalletLedgerEntry.BalanceAfter().Amount() = %q, want %q", got, want)
+	}
+
+	if got := entry.CreatedAt(); !got.Equal(createdAt) || got.Location() != time.UTC {
+		t.Errorf("WalletLedgerEntry.CreatedAt() = %v (%v), want %v (UTC)", got, got.Location(), createdAt)
+	}
+}
+
+func TestNewWalletLedgerEntryRejectsInconsistentCreditBalance(t *testing.T) {
+	t.Parallel()
+
+	money, err := NewMoney("25.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for money: %v", err)
+	}
+
+	balanceBefore, err := NewMoney("100.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance before: %v", err)
+	}
+
+	balanceAfter, err := NewMoney("120.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance after: %v", err)
+	}
+
+	_, err = NewWalletLedgerEntry(
+		"0192f300-27dd-7d3f-8071-5f8685deef37",
+		"0192f291-27dd-7d3f-8071-5f8685deef37",
+		"0192f298-345e-7e38-af88-e43f851a819d",
+		LedgerDirectionCredit,
+		money,
+		balanceBefore,
+		balanceAfter,
+		time.Date(2026, time.September, 30, 15, 0, 0, 0, time.UTC),
+	)
+	if !errors.Is(err, ErrInconsistentLedgerBalance) {
+		t.Fatalf(
+			"NewWalletLedgerEntry() error = %v, want ErrInconsistentLedgerBalance",
+			err,
+		)
+	}
+}
+
+func TestNewWalletLedgerEntryCreatesValidDebit(t *testing.T) {
+	t.Parallel()
+
+	money, err := NewMoney("25.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for money: %v", err)
+	}
+
+	balanceBefore, err := NewMoney("100.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance before: %v", err)
+	}
+
+	balanceAfter, err := NewMoney("75.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance after: %v", err)
+	}
+
+	entry, err := NewWalletLedgerEntry(
+		"0192f300-27dd-7d3f-8071-5f8685deef37",
+		"0192f291-27dd-7d3f-8071-5f8685deef37",
+		"0192f298-345e-7e38-af88-e43f851a819d",
+		LedgerDirectionDebit,
+		money,
+		balanceBefore,
+		balanceAfter,
+		time.Date(2026, time.September, 30, 15, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("NewWalletLedgerEntry() unexpected error: %v", err)
+	}
+
+	if got := entry.Direction(); got != LedgerDirectionDebit {
+		t.Errorf("WalletLedgerEntry.Direction() = %q, want %q", got, LedgerDirectionDebit)
+	}
+
+	if got, want := entry.BalanceAfter().Amount(), "75.00"; got != want {
+		t.Errorf("WalletLedgerEntry.BalanceAfter().Amount() = %q, want %q", got, want)
+	}
+}
+
+func TestNewWalletLedgerEntryRejectsInconsistentDebitBalance(t *testing.T) {
+	t.Parallel()
+
+	money, err := NewMoney("25.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for money: %v", err)
+	}
+
+	balanceBefore, err := NewMoney("100.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance before: %v", err)
+	}
+
+	balanceAfter, err := NewMoney("80.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance after: %v", err)
+	}
+
+	_, err = NewWalletLedgerEntry(
+		"0192f300-27dd-7d3f-8071-5f8685deef37",
+		"0192f291-27dd-7d3f-8071-5f8685deef37",
+		"0192f298-345e-7e38-af88-e43f851a819d",
+		LedgerDirectionDebit,
+		money,
+		balanceBefore,
+		balanceAfter,
+		time.Date(2026, time.September, 30, 15, 0, 0, 0, time.UTC),
+	)
+	if !errors.Is(err, ErrInconsistentLedgerBalance) {
+		t.Fatalf(
+			"NewWalletLedgerEntry() error = %v, want ErrInconsistentLedgerBalance",
+			err,
+		)
+	}
+}
+
+func TestNewWalletLedgerEntryRejectsInvalidDirection(t *testing.T) {
+	t.Parallel()
+
+	money, err := NewMoney("25.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for money: %v", err)
+	}
+
+	balanceBefore, err := NewMoney("100.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance before: %v", err)
+	}
+
+	balanceAfter, err := NewMoney("125.00", "BRL")
+	if err != nil {
+		t.Fatalf("NewMoney() unexpected setup error for balance after: %v", err)
+	}
+
+	for _, direction := range []LedgerDirection{"", "TRANSFER"} {
+		direction := direction
+		t.Run(string(direction), func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewWalletLedgerEntry(
+				"0192f300-27dd-7d3f-8071-5f8685deef37",
+				"0192f291-27dd-7d3f-8071-5f8685deef37",
+				"0192f298-345e-7e38-af88-e43f851a819d",
+				direction,
+				money,
+				balanceBefore,
+				balanceAfter,
+				time.Date(2026, time.September, 30, 15, 0, 0, 0, time.UTC),
+			)
+			if !errors.Is(err, ErrInvalidLedgerDirection) {
+				t.Fatalf(
+					"NewWalletLedgerEntry() error = %v, want ErrInvalidLedgerDirection",
+					err,
+				)
+			}
+		})
+	}
+}
