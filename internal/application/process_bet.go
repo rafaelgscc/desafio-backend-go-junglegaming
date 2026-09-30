@@ -10,23 +10,30 @@ import (
 
 var (
 	ErrNilWageringUnitOfWork          = errors.New("wagering unit of work is required")
-	ErrInvalidProcessBetCommand       = errors.New("invalid process bet command")
+	ErrInvalidProcessWagerCommand     = errors.New("invalid process wager command")
+	ErrInvalidProcessBetCommand       = ErrInvalidProcessWagerCommand
 	ErrUnexpectedWagerTransactionKind = errors.New("unexpected wager transaction kind")
 	ErrWagerWalletMismatch            = errors.New("wager transaction does not belong to wallet")
 	ErrWagerPlayerMismatch            = errors.New("wager transaction does not belong to wallet player")
 )
 
 type ProcessBetCommand struct {
-	TransactionID string
-	LedgerEntryID string
-	ProcessedAt   time.Time
+	TransactionID         string
+	LedgerEntryID         string
+	OutcomeEventID        string
+	BalanceChangedEventID string
+	CorrelationID         string
+	CausationID           string
+	ProcessedAt           time.Time
 }
 
-type ProcessBetResult struct {
+type ProcessWagerResult struct {
 	Status        domain.WagerTransactionStatus
 	Balance       domain.Money
 	WalletVersion int64
 }
+
+type ProcessBetResult = ProcessWagerResult
 
 type ProcessBetUseCase struct {
 	unitOfWork WageringUnitOfWork
@@ -45,32 +52,23 @@ func (useCase *ProcessBetUseCase) Execute(
 ) (ProcessBetResult, error) {
 	if command.TransactionID == "" ||
 		command.LedgerEntryID == "" ||
+		command.OutcomeEventID == "" ||
+		command.BalanceChangedEventID == "" ||
+		command.CorrelationID == "" ||
 		command.ProcessedAt.IsZero() {
 		return ProcessBetResult{}, ErrInvalidProcessBetCommand
 	}
 
 	var result ProcessBetResult
 	err := useCase.unitOfWork.WithinTransaction(ctx, func(tx WageringTransaction) error {
-		transaction, err := tx.FindWagerTransactionForUpdate(ctx, command.TransactionID)
+		transaction, wallet, err := loadPendingWagerAndWallet(
+			ctx,
+			tx,
+			command.TransactionID,
+			domain.WagerTransactionKindBet,
+		)
 		if err != nil {
 			return err
-		}
-		if transaction.Kind() != domain.WagerTransactionKindBet {
-			return ErrUnexpectedWagerTransactionKind
-		}
-		if transaction.Status() != domain.WagerTransactionStatusPending {
-			return domain.ErrInvalidWagerTransactionTransition
-		}
-
-		wallet, err := tx.FindWalletForUpdate(ctx, transaction.WalletID())
-		if err != nil {
-			return err
-		}
-		if wallet.ID() != transaction.WalletID() {
-			return ErrWagerWalletMismatch
-		}
-		if wallet.PlayerID() != transaction.PlayerID() {
-			return ErrWagerPlayerMismatch
 		}
 
 		balanceBefore := wallet.Balance()
@@ -86,6 +84,15 @@ func (useCase *ProcessBetUseCase) Execute(
 				return err
 			}
 			if err := tx.SaveWagerTransaction(ctx, transaction); err != nil {
+				return err
+			}
+			if err := tx.AppendOutboxEvent(ctx, newWagerTransactionRejectedEvent(
+				command.OutcomeEventID,
+				command.CorrelationID,
+				command.CausationID,
+				command.ProcessedAt,
+				transaction,
+			)); err != nil {
 				return err
 			}
 
@@ -123,6 +130,26 @@ func (useCase *ProcessBetUseCase) Execute(
 		if err := tx.SaveWagerTransaction(ctx, transaction); err != nil {
 			return err
 		}
+		if err := tx.AppendOutboxEvent(ctx, newWagerTransactionProcessedEvent(
+			command.OutcomeEventID,
+			command.CorrelationID,
+			command.CausationID,
+			command.ProcessedAt,
+			transaction,
+			wallet.Balance(),
+		)); err != nil {
+			return err
+		}
+		if err := tx.AppendOutboxEvent(ctx, newWalletBalanceChangedEvent(
+			command.BalanceChangedEventID,
+			command.CorrelationID,
+			command.CausationID,
+			command.ProcessedAt,
+			entry,
+			wallet.Version(),
+		)); err != nil {
+			return err
+		}
 
 		result = ProcessBetResult{
 			Status:        transaction.Status(),
@@ -136,4 +163,116 @@ func (useCase *ProcessBetUseCase) Execute(
 	}
 
 	return result, nil
+}
+
+func newWagerTransactionProcessedEvent(
+	eventID string,
+	correlationID string,
+	causationID string,
+	occurredAt time.Time,
+	transaction domain.WagerTransaction,
+	balance domain.Money,
+) IntegrationEvent {
+	return IntegrationEvent{
+		EventID:       eventID,
+		EventType:     IntegrationEventTypeWagerTransactionProcessed,
+		AggregateID:   transaction.ID(),
+		CorrelationID: correlationID,
+		CausationID:   causationID,
+		OccurredAt:    occurredAt.UTC(),
+		Version:       IntegrationEventVersion,
+		Data: WagerTransactionProcessedData{
+			TransactionID:         transaction.ID(),
+			ProviderID:            transaction.ProviderID(),
+			ExternalTransactionID: transaction.ExternalTransactionID(),
+			Kind:                  transaction.Kind(),
+			Money:                 transaction.Money(),
+			Balance:               balance,
+		},
+	}
+}
+
+func newWagerTransactionRejectedEvent(
+	eventID string,
+	correlationID string,
+	causationID string,
+	occurredAt time.Time,
+	transaction domain.WagerTransaction,
+) IntegrationEvent {
+	return IntegrationEvent{
+		EventID:       eventID,
+		EventType:     IntegrationEventTypeWagerTransactionRejected,
+		AggregateID:   transaction.ID(),
+		CorrelationID: correlationID,
+		CausationID:   causationID,
+		OccurredAt:    occurredAt.UTC(),
+		Version:       IntegrationEventVersion,
+		Data: WagerTransactionRejectedData{
+			TransactionID:         transaction.ID(),
+			ProviderID:            transaction.ProviderID(),
+			ExternalTransactionID: transaction.ExternalTransactionID(),
+			Kind:                  transaction.Kind(),
+			Money:                 transaction.Money(),
+			FailureCode:           transaction.FailureCode(),
+		},
+	}
+}
+
+func newWalletBalanceChangedEvent(
+	eventID string,
+	correlationID string,
+	causationID string,
+	occurredAt time.Time,
+	entry domain.WalletLedgerEntry,
+	walletVersion int64,
+) IntegrationEvent {
+	return IntegrationEvent{
+		EventID:       eventID,
+		EventType:     IntegrationEventTypeWalletBalanceChanged,
+		AggregateID:   entry.WalletID(),
+		CorrelationID: correlationID,
+		CausationID:   causationID,
+		OccurredAt:    occurredAt.UTC(),
+		Version:       IntegrationEventVersion,
+		Data: WalletBalanceChangedData{
+			WalletID:      entry.WalletID(),
+			TransactionID: entry.TransactionID(),
+			Direction:     entry.Direction(),
+			Money:         entry.Money(),
+			BalanceBefore: entry.BalanceBefore(),
+			BalanceAfter:  entry.BalanceAfter(),
+			WalletVersion: walletVersion,
+		},
+	}
+}
+
+func loadPendingWagerAndWallet(
+	ctx context.Context,
+	tx WageringTransaction,
+	transactionID string,
+	expectedKind domain.WagerTransactionKind,
+) (domain.WagerTransaction, domain.Wallet, error) {
+	transaction, err := tx.FindWagerTransactionForUpdate(ctx, transactionID)
+	if err != nil {
+		return domain.WagerTransaction{}, domain.Wallet{}, err
+	}
+	if transaction.Kind() != expectedKind {
+		return domain.WagerTransaction{}, domain.Wallet{}, ErrUnexpectedWagerTransactionKind
+	}
+	if transaction.Status() != domain.WagerTransactionStatusPending {
+		return domain.WagerTransaction{}, domain.Wallet{}, domain.ErrInvalidWagerTransactionTransition
+	}
+
+	wallet, err := tx.FindWalletForUpdate(ctx, transaction.WalletID())
+	if err != nil {
+		return domain.WagerTransaction{}, domain.Wallet{}, err
+	}
+	if wallet.ID() != transaction.WalletID() {
+		return domain.WagerTransaction{}, domain.Wallet{}, ErrWagerWalletMismatch
+	}
+	if wallet.PlayerID() != transaction.PlayerID() {
+		return domain.WagerTransaction{}, domain.Wallet{}, ErrWagerPlayerMismatch
+	}
+
+	return transaction, wallet, nil
 }

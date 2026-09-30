@@ -90,6 +90,9 @@ const (
 	WagerTransactionFailureCodeInfrastructureFailure     WagerTransactionFailureCode = "INFRASTRUCTURE_FAILURE"
 	WagerTransactionFailureCodeInsufficientFunds         WagerTransactionFailureCode = "INSUFFICIENT_FUNDS"
 	WagerTransactionFailureCodeReversalInsufficientFunds WagerTransactionFailureCode = "REVERSAL_INSUFFICIENT_FUNDS"
+	WagerTransactionFailureCodeReferenceNotProcessable   WagerTransactionFailureCode = "REFERENCE_NOT_PROCESSABLE"
+	WagerTransactionFailureCodeReferenceMismatch         WagerTransactionFailureCode = "REFERENCE_MISMATCH"
+	WagerTransactionFailureCodeDuplicateReversal         WagerTransactionFailureCode = "DUPLICATE_REVERSAL"
 )
 
 type NewExternalWagerTransactionParams struct {

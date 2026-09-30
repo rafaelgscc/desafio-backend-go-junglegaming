@@ -20,9 +20,13 @@ func TestProcessBetDebitsWalletAndPersistsFinancialResult(t *testing.T) {
 	}
 
 	result, err := useCase.Execute(context.Background(), ProcessBetCommand{
-		TransactionID: transaction.ID(),
-		LedgerEntryID: "ledger-entry-1",
-		ProcessedAt:   now.Add(time.Second),
+		TransactionID:         transaction.ID(),
+		LedgerEntryID:         "ledger-entry-1",
+		OutcomeEventID:        "event-wager-processed-1",
+		BalanceChangedEventID: "event-wallet-balance-1",
+		CorrelationID:         "correlation-1",
+		CausationID:           "request-1",
+		ProcessedAt:           now.Add(time.Second),
 	})
 	if err != nil {
 		t.Fatalf("Execute() unexpected error: %v", err)
@@ -56,6 +60,22 @@ func TestProcessBetDebitsWalletAndPersistsFinancialResult(t *testing.T) {
 	if got := unitOfWork.ledgerEntry.BalanceAfter().Amount(); got != "75.00" {
 		t.Errorf("ledger balance after = %q, want 75.00", got)
 	}
+	if len(unitOfWork.outboxEvents) != 2 {
+		t.Fatalf("outbox event count = %d, want 2", len(unitOfWork.outboxEvents))
+	}
+	if unitOfWork.outboxEvents[0].EventType != IntegrationEventTypeWagerTransactionProcessed {
+		t.Errorf("first outbox event type = %q, want %q", unitOfWork.outboxEvents[0].EventType, IntegrationEventTypeWagerTransactionProcessed)
+	}
+	if unitOfWork.outboxEvents[1].EventType != IntegrationEventTypeWalletBalanceChanged {
+		t.Errorf("second outbox event type = %q, want %q", unitOfWork.outboxEvents[1].EventType, IntegrationEventTypeWalletBalanceChanged)
+	}
+	balanceData, ok := unitOfWork.outboxEvents[1].Data.(WalletBalanceChangedData)
+	if !ok {
+		t.Fatalf("wallet event data type = %T, want WalletBalanceChangedData", unitOfWork.outboxEvents[1].Data)
+	}
+	if balanceData.WalletVersion != 2 || balanceData.BalanceAfter.Amount() != "75.00" {
+		t.Errorf("wallet event data = version %d balance %s, want version 2 balance 75.00", balanceData.WalletVersion, balanceData.BalanceAfter.Amount())
+	}
 }
 
 func TestProcessBetRejectsInsufficientFundsWithoutChangingWalletOrLedger(t *testing.T) {
@@ -69,9 +89,13 @@ func TestProcessBetRejectsInsufficientFundsWithoutChangingWalletOrLedger(t *test
 	}
 
 	result, err := useCase.Execute(context.Background(), ProcessBetCommand{
-		TransactionID: transaction.ID(),
-		LedgerEntryID: "ledger-entry-1",
-		ProcessedAt:   now.Add(time.Second),
+		TransactionID:         transaction.ID(),
+		LedgerEntryID:         "ledger-entry-1",
+		OutcomeEventID:        "event-wager-rejected-1",
+		BalanceChangedEventID: "event-wallet-balance-unused",
+		CorrelationID:         "correlation-1",
+		CausationID:           "request-1",
+		ProcessedAt:           now.Add(time.Second),
 	})
 	if err != nil {
 		t.Fatalf("Execute() unexpected error: %v", err)
@@ -94,6 +118,13 @@ func TestProcessBetRejectsInsufficientFundsWithoutChangingWalletOrLedger(t *test
 	}
 	if unitOfWork.transaction.FailureCode() != domain.WagerTransactionFailureCodeInsufficientFunds {
 		t.Errorf("failure code = %q, want %q", unitOfWork.transaction.FailureCode(), domain.WagerTransactionFailureCodeInsufficientFunds)
+	}
+	if len(unitOfWork.outboxEvents) != 1 || unitOfWork.outboxEvents[0].EventType != IntegrationEventTypeWagerTransactionRejected {
+		t.Fatalf("outbox events = %#v, want one WagerTransactionRejected", unitOfWork.outboxEvents)
+	}
+	rejectedData, ok := unitOfWork.outboxEvents[0].Data.(WagerTransactionRejectedData)
+	if !ok || rejectedData.FailureCode != domain.WagerTransactionFailureCodeInsufficientFunds {
+		t.Errorf("rejected event data = %#v, want INSUFFICIENT_FUNDS", unitOfWork.outboxEvents[0].Data)
 	}
 }
 
@@ -131,9 +162,12 @@ func TestProcessBetRollsBackEveryChangeWhenPersistenceFails(t *testing.T) {
 	}
 
 	_, err = useCase.Execute(context.Background(), ProcessBetCommand{
-		TransactionID: transaction.ID(),
-		LedgerEntryID: "ledger-entry-1",
-		ProcessedAt:   now.Add(time.Second),
+		TransactionID:         transaction.ID(),
+		LedgerEntryID:         "ledger-entry-1",
+		OutcomeEventID:        "event-wager-processed-1",
+		BalanceChangedEventID: "event-wallet-balance-1",
+		CorrelationID:         "correlation-1",
+		ProcessedAt:           now.Add(time.Second),
 	})
 	if !errors.Is(err, persistenceErr) {
 		t.Fatalf("Execute() error = %v, want persistence error", err)
@@ -147,12 +181,67 @@ func TestProcessBetRollsBackEveryChangeWhenPersistenceFails(t *testing.T) {
 	if unitOfWork.ledgerEntry != nil {
 		t.Error("ledger entry was committed after rollback")
 	}
+	if len(unitOfWork.outboxEvents) != 0 {
+		t.Errorf("outbox events were committed after rollback: %d", len(unitOfWork.outboxEvents))
+	}
+}
+
+func TestProcessBetRollsBackFinancialChangesWhenOutboxPersistenceFails(t *testing.T) {
+	t.Parallel()
+
+	wallet, transaction, now := processBetFixtures(t, "100.00", "25.00")
+	outboxErr := errors.New("append outbox failed")
+	unitOfWork := &fakeWageringUnitOfWork{
+		wallet:          wallet,
+		transaction:     transaction,
+		appendOutboxErr: outboxErr,
+	}
+	useCase, err := NewProcessBetUseCase(unitOfWork)
+	if err != nil {
+		t.Fatalf("NewProcessBetUseCase() unexpected error: %v", err)
+	}
+
+	_, err = useCase.Execute(context.Background(), ProcessBetCommand{
+		TransactionID:         transaction.ID(),
+		LedgerEntryID:         "ledger-entry-1",
+		OutcomeEventID:        "event-wager-processed-1",
+		BalanceChangedEventID: "event-wallet-balance-1",
+		CorrelationID:         "correlation-1",
+		ProcessedAt:           now.Add(time.Second),
+	})
+	if !errors.Is(err, outboxErr) {
+		t.Fatalf("Execute() error = %v, want outbox error", err)
+	}
+	if unitOfWork.wallet.Balance().Amount() != "100.00" || unitOfWork.wallet.Version() != 1 {
+		t.Errorf("wallet was committed after rollback: balance=%s version=%d", unitOfWork.wallet.Balance().Amount(), unitOfWork.wallet.Version())
+	}
+	if unitOfWork.transaction.Status() != domain.WagerTransactionStatusPending {
+		t.Errorf("transaction status was committed as %q, want PENDING", unitOfWork.transaction.Status())
+	}
+	if unitOfWork.ledgerEntry != nil || len(unitOfWork.outboxEvents) != 0 {
+		t.Errorf("ledger/outbox was committed after rollback: ledger=%v events=%d", unitOfWork.ledgerEntry != nil, len(unitOfWork.outboxEvents))
+	}
 }
 
 func processBetFixtures(
 	t *testing.T,
 	walletAmount string,
 	betAmount string,
+) (domain.Wallet, domain.WagerTransaction, time.Time) {
+	t.Helper()
+	return processWagerFixtures(
+		t,
+		domain.WagerTransactionKindBet,
+		walletAmount,
+		betAmount,
+	)
+}
+
+func processWagerFixtures(
+	t *testing.T,
+	kind domain.WagerTransactionKind,
+	walletAmount string,
+	wagerAmount string,
 ) (domain.Wallet, domain.WagerTransaction, time.Time) {
 	t.Helper()
 
@@ -165,9 +254,9 @@ func processBetFixtures(
 	if err != nil {
 		t.Fatalf("NewWallet() unexpected setup error: %v", err)
 	}
-	betMoney, err := domain.NewMoney(betAmount, "BRL")
+	wagerMoney, err := domain.NewMoney(wagerAmount, "BRL")
 	if err != nil {
-		t.Fatalf("NewMoney() unexpected bet setup error: %v", err)
+		t.Fatalf("NewMoney() unexpected wager setup error: %v", err)
 	}
 	transaction, err := domain.NewExternalWagerTransaction(domain.NewExternalWagerTransactionParams{
 		ID:                    "wager-transaction-1",
@@ -179,8 +268,8 @@ func processBetFixtures(
 		PlayerID:              wallet.PlayerID(),
 		RoundID:               "round-1",
 		GameID:                "game-1",
-		Kind:                  domain.WagerTransactionKindBet,
-		Money:                 betMoney,
+		Kind:                  kind,
+		Money:                 wagerMoney,
 		OccurredAt:            now,
 	})
 	if err != nil {
@@ -190,12 +279,17 @@ func processBetFixtures(
 }
 
 type fakeWageringUnitOfWork struct {
-	wallet          domain.Wallet
-	transaction     domain.WagerTransaction
-	ledgerEntry     *domain.WalletLedgerEntry
-	calls           int
-	fail            error
-	appendLedgerErr error
+	wallet                domain.Wallet
+	transaction           domain.WagerTransaction
+	ledgerEntry           *domain.WalletLedgerEntry
+	calls                 int
+	fail                  error
+	appendLedgerErr       error
+	appendOutboxErr       error
+	outboxEvents          []IntegrationEvent
+	referencedTransaction domain.WagerTransaction
+	referenceErr          error
+	hasProcessedReversal  bool
 }
 
 func (unitOfWork *fakeWageringUnitOfWork) WithinTransaction(
@@ -208,9 +302,13 @@ func (unitOfWork *fakeWageringUnitOfWork) WithinTransaction(
 	}
 
 	working := &fakeWageringTransaction{
-		wallet:          unitOfWork.wallet,
-		transaction:     unitOfWork.transaction,
-		appendLedgerErr: unitOfWork.appendLedgerErr,
+		wallet:                unitOfWork.wallet,
+		transaction:           unitOfWork.transaction,
+		appendLedgerErr:       unitOfWork.appendLedgerErr,
+		appendOutboxErr:       unitOfWork.appendOutboxErr,
+		referencedTransaction: unitOfWork.referencedTransaction,
+		referenceErr:          unitOfWork.referenceErr,
+		hasProcessedReversal:  unitOfWork.hasProcessedReversal,
 	}
 	if err := fn(working); err != nil {
 		return err
@@ -219,14 +317,20 @@ func (unitOfWork *fakeWageringUnitOfWork) WithinTransaction(
 	unitOfWork.wallet = working.wallet
 	unitOfWork.transaction = working.transaction
 	unitOfWork.ledgerEntry = working.ledgerEntry
+	unitOfWork.outboxEvents = working.outboxEvents
 	return nil
 }
 
 type fakeWageringTransaction struct {
-	wallet          domain.Wallet
-	transaction     domain.WagerTransaction
-	ledgerEntry     *domain.WalletLedgerEntry
-	appendLedgerErr error
+	wallet                domain.Wallet
+	transaction           domain.WagerTransaction
+	ledgerEntry           *domain.WalletLedgerEntry
+	appendLedgerErr       error
+	appendOutboxErr       error
+	outboxEvents          []IntegrationEvent
+	referencedTransaction domain.WagerTransaction
+	referenceErr          error
+	hasProcessedReversal  bool
 }
 
 func (tx *fakeWageringTransaction) FindWagerTransactionForUpdate(
@@ -241,6 +345,25 @@ func (tx *fakeWageringTransaction) FindWalletForUpdate(
 	_ string,
 ) (domain.Wallet, error) {
 	return tx.wallet, nil
+}
+
+func (tx *fakeWageringTransaction) FindWagerTransactionByExternalIDForUpdate(
+	_ context.Context,
+	_ string,
+	_ string,
+) (domain.WagerTransaction, error) {
+	if tx.referenceErr != nil {
+		return domain.WagerTransaction{}, tx.referenceErr
+	}
+	return tx.referencedTransaction, nil
+}
+
+func (tx *fakeWageringTransaction) HasProcessedReversal(
+	_ context.Context,
+	_ string,
+	_ domain.WagerTransactionKind,
+) (bool, error) {
+	return tx.hasProcessedReversal, nil
 }
 
 func (tx *fakeWageringTransaction) SaveWagerTransaction(
@@ -264,5 +387,16 @@ func (tx *fakeWageringTransaction) AppendWalletLedgerEntry(
 		return tx.appendLedgerErr
 	}
 	tx.ledgerEntry = &entry
+	return nil
+}
+
+func (tx *fakeWageringTransaction) AppendOutboxEvent(
+	_ context.Context,
+	event IntegrationEvent,
+) error {
+	if tx.appendOutboxErr != nil {
+		return tx.appendOutboxErr
+	}
+	tx.outboxEvents = append(tx.outboxEvents, event)
 	return nil
 }
