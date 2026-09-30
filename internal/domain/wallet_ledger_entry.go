@@ -8,6 +8,8 @@ import (
 var (
 	ErrInconsistentLedgerBalance = errors.New("inconsistent ledger balance")
 	ErrInvalidLedgerDirection    = errors.New("invalid ledger direction")
+	ErrInvalidLedgerEntryID      = errors.New("invalid ledger entry ID")
+	ErrInvalidTransactionID      = errors.New("invalid transaction ID")
 )
 
 type LedgerDirection string
@@ -38,6 +40,28 @@ func NewWalletLedgerEntry(
 	balanceAfter Money,
 	createdAt time.Time,
 ) (WalletLedgerEntry, error) {
+	if id == "" {
+		return WalletLedgerEntry{}, ErrInvalidLedgerEntryID
+	}
+
+	if walletID == "" {
+		return WalletLedgerEntry{}, ErrInvalidWalletID
+	}
+
+	if transactionID == "" {
+		return WalletLedgerEntry{}, ErrInvalidTransactionID
+	}
+
+	if createdAt.IsZero() {
+		return WalletLedgerEntry{}, ErrInvalidTimestamp
+	}
+
+	createdAt = createdAt.UTC()
+
+	if err := validatePositiveAmount(money); err != nil {
+		return WalletLedgerEntry{}, err
+	}
+
 	if direction == LedgerDirectionCredit {
 		expectedBalance, err := balanceBefore.Add(money)
 		if err != nil {
