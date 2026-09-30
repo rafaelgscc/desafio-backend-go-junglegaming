@@ -86,8 +86,10 @@ const (
 type WagerTransactionFailureCode string
 
 const (
-	WagerTransactionFailureCodeReferenceNotFound     WagerTransactionFailureCode = "REFERENCE_NOT_FOUND"
-	WagerTransactionFailureCodeInfrastructureFailure WagerTransactionFailureCode = "INFRASTRUCTURE_FAILURE"
+	WagerTransactionFailureCodeReferenceNotFound         WagerTransactionFailureCode = "REFERENCE_NOT_FOUND"
+	WagerTransactionFailureCodeInfrastructureFailure     WagerTransactionFailureCode = "INFRASTRUCTURE_FAILURE"
+	WagerTransactionFailureCodeInsufficientFunds         WagerTransactionFailureCode = "INSUFFICIENT_FUNDS"
+	WagerTransactionFailureCodeReversalInsufficientFunds WagerTransactionFailureCode = "REVERSAL_INSUFFICIENT_FUNDS"
 )
 
 type NewExternalWagerTransactionParams struct {
