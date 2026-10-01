@@ -15,5 +15,21 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    image: migrate/migrate:v4.20.1
+    profiles:
+      - tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    entrypoint:
+      - migrate
+      - -path=/migrations
+      - -database=postgres://jungle:jungle@postgres:5432/jungle_wallet?sslmode=disable
+    command:
+      - up
+
 volumes:
   postgres_data:

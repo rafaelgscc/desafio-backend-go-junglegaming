@@ -98,6 +98,10 @@ func (m Money) Currency() string {
 	return m.currency
 }
 
+func (m Money) AmountInCents() int64 {
+	return m.amountInCents
+}
+
 func isValidCurrency(currency string) bool {
 	if len(currency) != 3 {
 		return false

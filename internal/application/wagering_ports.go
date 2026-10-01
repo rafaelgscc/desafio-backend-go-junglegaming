@@ -2,8 +2,14 @@ package application
 
 import (
 	"context"
+	"errors"
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
+)
+
+var (
+	ErrWalletNotFound         = errors.New("wallet not found")
+	ErrConcurrentWalletUpdate = errors.New("wallet was concurrently updated")
 )
 
 // WageringTransaction exposes every persistence operation that must share the
