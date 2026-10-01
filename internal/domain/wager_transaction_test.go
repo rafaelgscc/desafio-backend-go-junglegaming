@@ -1924,6 +1924,26 @@ func TestNewExternalWagerTransactionRejectsReferenceForUnsupportedKind(t *testin
 	}
 }
 
+func TestNewExternalWagerTransactionAcceptsOptionalWinReference(t *testing.T) {
+	t.Parallel()
+
+	params := validExternalWagerTransactionParams(t)
+	params.Kind = WagerTransactionKindWin
+	params.ReferenceExternalTransactionID = "bet-transaction-456"
+
+	transaction, err := NewExternalWagerTransaction(params)
+	if err != nil {
+		t.Fatalf("NewExternalWagerTransaction() unexpected error: %v", err)
+	}
+	if transaction.ReferenceExternalTransactionID() != params.ReferenceExternalTransactionID {
+		t.Fatalf(
+			"ReferenceExternalTransactionID() = %q, want %q",
+			transaction.ReferenceExternalTransactionID(),
+			params.ReferenceExternalTransactionID,
+		)
+	}
+}
+
 func validProcessedWagerTransactionRehydrateParams(
 	t *testing.T,
 ) RehydrateWagerTransactionParams {
