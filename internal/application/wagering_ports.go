@@ -8,8 +8,11 @@ import (
 )
 
 var (
-	ErrWalletNotFound         = errors.New("wallet not found")
-	ErrConcurrentWalletUpdate = errors.New("wallet was concurrently updated")
+	ErrWalletNotFound                 = errors.New("wallet not found")
+	ErrConcurrentWalletUpdate         = errors.New("wallet was concurrently updated")
+	ErrWagerTransactionAlreadyExists  = errors.New("wager transaction already exists")
+	ErrWalletLedgerEntryAlreadyExists = errors.New("wallet ledger entry already exists")
+	ErrOutboxEventAlreadyExists       = errors.New("outbox event already exists")
 )
 
 // WageringTransaction exposes every persistence operation that must share the

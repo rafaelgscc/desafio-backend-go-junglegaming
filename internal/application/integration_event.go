@@ -18,49 +18,49 @@ const (
 const IntegrationEventVersion = 1
 
 type IntegrationEvent struct {
-	EventID       string
-	EventType     IntegrationEventType
-	AggregateID   string
-	CorrelationID string
-	CausationID   string
-	OccurredAt    time.Time
-	Version       int
-	Data          any
+	EventID       string               `json:"event_id"`
+	EventType     IntegrationEventType `json:"event_type"`
+	AggregateID   string               `json:"aggregate_id"`
+	CorrelationID string               `json:"correlation_id"`
+	CausationID   string               `json:"causation_id,omitempty"`
+	OccurredAt    time.Time            `json:"occurred_at"`
+	Version       int                  `json:"version"`
+	Data          any                  `json:"data"`
 }
 
 type WagerTransactionProcessedData struct {
-	TransactionID         string
-	ProviderID            string
-	ExternalTransactionID string
-	Kind                  domain.WagerTransactionKind
-	Money                 domain.Money
-	Balance               domain.Money
+	TransactionID         string                      `json:"transaction_id"`
+	ProviderID            string                      `json:"provider_id"`
+	ExternalTransactionID string                      `json:"external_transaction_id"`
+	Kind                  domain.WagerTransactionKind `json:"kind"`
+	Money                 domain.Money                `json:"money"`
+	Balance               domain.Money                `json:"balance"`
 }
 
 type WagerTransactionRejectedData struct {
-	TransactionID         string
-	ProviderID            string
-	ExternalTransactionID string
-	Kind                  domain.WagerTransactionKind
-	Money                 domain.Money
-	FailureCode           domain.WagerTransactionFailureCode
+	TransactionID         string                             `json:"transaction_id"`
+	ProviderID            string                             `json:"provider_id"`
+	ExternalTransactionID string                             `json:"external_transaction_id"`
+	Kind                  domain.WagerTransactionKind        `json:"kind"`
+	Money                 domain.Money                       `json:"money"`
+	FailureCode           domain.WagerTransactionFailureCode `json:"failure_code"`
 }
 
 type WalletBalanceChangedData struct {
-	WalletID      string
-	TransactionID string
-	Direction     domain.LedgerDirection
-	Money         domain.Money
-	BalanceBefore domain.Money
-	BalanceAfter  domain.Money
-	WalletVersion int64
+	WalletID      string                 `json:"wallet_id"`
+	TransactionID string                 `json:"transaction_id"`
+	Direction     domain.LedgerDirection `json:"direction"`
+	Money         domain.Money           `json:"money"`
+	BalanceBefore domain.Money           `json:"balance_before"`
+	BalanceAfter  domain.Money           `json:"balance_after"`
+	WalletVersion int64                  `json:"wallet_version"`
 }
 
 type WagerTransactionPendingReferenceData struct {
-	TransactionID                  string
-	ProviderID                     string
-	ExternalTransactionID          string
-	ReferenceExternalTransactionID string
-	ReferenceAttempts              int
-	NextReferenceAttemptAt         time.Time
+	TransactionID                  string    `json:"transaction_id"`
+	ProviderID                     string    `json:"provider_id"`
+	ExternalTransactionID          string    `json:"external_transaction_id"`
+	ReferenceExternalTransactionID string    `json:"reference_external_transaction_id"`
+	ReferenceAttempts              int       `json:"reference_attempts"`
+	NextReferenceAttemptAt         time.Time `json:"next_reference_attempt_at"`
 }
