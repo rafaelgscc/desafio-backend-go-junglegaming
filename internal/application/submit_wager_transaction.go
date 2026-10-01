@@ -113,6 +113,52 @@ func (useCase *SubmitWagerTransactionUseCase) Execute(
 		return nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrIdempotencyKeyConflict) ||
+			errors.Is(err, ErrExternalTransactionConflict) {
+			return useCase.resolveConcurrentSubmission(ctx, command, err)
+		}
+		return SubmitWagerTransactionResult{}, err
+	}
+	return result, nil
+}
+
+func (useCase *SubmitWagerTransactionUseCase) resolveConcurrentSubmission(
+	ctx context.Context,
+	command SubmitWagerTransactionCommand,
+	originalErr error,
+) (SubmitWagerTransactionResult, error) {
+	var result SubmitWagerTransactionResult
+	err := useCase.unitOfWork.WithinTransaction(ctx, func(tx WageringTransaction) error {
+		existing, err := tx.FindWagerTransactionByIdempotencyKeyForUpdate(
+			ctx,
+			command.ProviderID,
+			command.IdempotencyKey,
+		)
+		if err == nil {
+			if existing.PayloadHash() != command.PayloadHash {
+				return ErrIdempotencyKeyConflict
+			}
+			result = submitResultFromTransaction(existing, true)
+			return nil
+		}
+		if !errors.Is(err, ErrWagerTransactionNotFound) {
+			return err
+		}
+
+		_, err = tx.FindWagerTransactionByExternalIDForUpdate(
+			ctx,
+			command.ProviderID,
+			command.ExternalTransactionID,
+		)
+		if err == nil {
+			return ErrExternalTransactionConflict
+		}
+		if !errors.Is(err, ErrWagerTransactionNotFound) {
+			return err
+		}
+		return originalErr
+	})
+	if err != nil {
 		return SubmitWagerTransactionResult{}, err
 	}
 	return result, nil

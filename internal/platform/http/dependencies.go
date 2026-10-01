@@ -9,9 +9,12 @@ import (
 )
 
 var (
-	ErrOpenWalletExecutorRequired = errors.New("open wallet executor is required")
-	ErrIDGeneratorRequired        = errors.New("ID generator is required")
-	ErrClockRequired              = errors.New("clock is required")
+	ErrOpenWalletExecutorRequired              = errors.New("open wallet executor is required")
+	ErrExecuteWagerTransactionExecutorRequired = errors.New(
+		"execute wager transaction executor is required",
+	)
+	ErrIDGeneratorRequired = errors.New("ID generator is required")
+	ErrClockRequired       = errors.New("clock is required")
 )
 
 type IDGenerator interface {

@@ -191,6 +191,7 @@ func persistPendingReference(
 	}
 	*result = ProcessReversalResult{
 		Status: transaction.Status(), Balance: wallet.Balance(), WalletVersion: wallet.Version(),
+		FailureCode: transaction.FailureCode(),
 	}
 	return nil
 }
@@ -218,6 +219,7 @@ func persistRejectedReversal(
 	}
 	*result = ProcessReversalResult{
 		Status: transaction.Status(), Balance: wallet.Balance(), WalletVersion: wallet.Version(),
+		FailureCode: transaction.FailureCode(),
 	}
 	return nil
 }
@@ -284,6 +286,7 @@ func applyReversal(
 
 	*result = ProcessReversalResult{
 		Status: transaction.Status(), Balance: wallet.Balance(), WalletVersion: wallet.Version(),
+		FailureCode: transaction.FailureCode(),
 	}
 	return nil
 }

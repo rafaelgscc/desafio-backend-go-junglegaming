@@ -31,6 +31,7 @@ type ProcessWagerResult struct {
 	Status        domain.WagerTransactionStatus
 	Balance       domain.Money
 	WalletVersion int64
+	FailureCode   domain.WagerTransactionFailureCode
 }
 
 type ProcessBetResult = ProcessWagerResult
@@ -100,6 +101,7 @@ func (useCase *ProcessBetUseCase) Execute(
 				Status:        transaction.Status(),
 				Balance:       wallet.Balance(),
 				WalletVersion: wallet.Version(),
+				FailureCode:   transaction.FailureCode(),
 			}
 			return nil
 		}

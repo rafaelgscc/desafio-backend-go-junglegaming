@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
@@ -53,6 +54,40 @@ func (useCase *ProcessWinUseCase) Execute(
 		)
 		if err != nil {
 			return err
+		}
+		if transaction.ReferenceExternalTransactionID() != "" {
+			reference, err := tx.FindWagerTransactionByExternalIDForUpdate(
+				ctx,
+				transaction.ProviderID(),
+				transaction.ReferenceExternalTransactionID(),
+			)
+			if err != nil {
+				if errors.Is(err, ErrWagerTransactionNotFound) {
+					return rejectWin(
+						ctx, tx, command, &transaction, wallet,
+						domain.WagerTransactionFailureCodeReferenceNotFound,
+						&result,
+					)
+				}
+				return err
+			}
+			if reference.Status() != domain.WagerTransactionStatusProcessed {
+				return rejectWin(
+					ctx, tx, command, &transaction, wallet,
+					domain.WagerTransactionFailureCodeReferenceNotProcessable,
+					&result,
+				)
+			}
+			if !validWinReference(transaction, reference) {
+				return rejectWin(
+					ctx, tx, command, &transaction, wallet,
+					domain.WagerTransactionFailureCodeReferenceMismatch,
+					&result,
+				)
+			}
+			if err := transaction.ResolveReference(reference.ID(), command.ProcessedAt); err != nil {
+				return err
+			}
 		}
 
 		balanceBefore := wallet.Balance()
@@ -119,4 +154,48 @@ func (useCase *ProcessWinUseCase) Execute(
 	}
 
 	return result, nil
+}
+
+func rejectWin(
+	ctx context.Context,
+	tx WageringTransaction,
+	command ProcessWinCommand,
+	transaction *domain.WagerTransaction,
+	wallet domain.Wallet,
+	failureCode domain.WagerTransactionFailureCode,
+	result *ProcessWinResult,
+) error {
+	if err := transaction.MarkRejected(failureCode, command.ProcessedAt); err != nil {
+		return err
+	}
+	if err := tx.SaveWagerTransaction(ctx, *transaction); err != nil {
+		return err
+	}
+	if err := tx.AppendOutboxEvent(ctx, newWagerTransactionRejectedEvent(
+		command.OutcomeEventID,
+		command.CorrelationID,
+		command.CausationID,
+		command.ProcessedAt,
+		*transaction,
+	)); err != nil {
+		return err
+	}
+	*result = ProcessWinResult{
+		Status:        transaction.Status(),
+		Balance:       wallet.Balance(),
+		WalletVersion: wallet.Version(),
+		FailureCode:   transaction.FailureCode(),
+	}
+	return nil
+}
+
+func validWinReference(
+	transaction domain.WagerTransaction,
+	reference domain.WagerTransaction,
+) bool {
+	return reference.Kind() == domain.WagerTransactionKindBet &&
+		reference.ProviderID() == transaction.ProviderID() &&
+		reference.PlayerID() == transaction.PlayerID() &&
+		reference.WalletID() == transaction.WalletID() &&
+		reference.RoundID() == transaction.RoundID()
 }

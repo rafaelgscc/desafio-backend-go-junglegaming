@@ -37,8 +37,33 @@ var Module = fx.Module(
 			application.NewProcessRollbackUseCase,
 			fx.ResultTags(`name:"process_rollback"`),
 		),
+		provideExecuteWagerTransactionUseCase,
 	),
 )
+
+type executeWagerTransactionDependencies struct {
+	fx.In
+
+	Submit   *application.SubmitWagerTransactionUseCase
+	Bet      *application.ProcessBetUseCase
+	Win      *application.ProcessWinUseCase
+	Loss     *application.ProcessLossUseCase
+	Refund   *application.ProcessReversalUseCase `name:"process_refund"`
+	Rollback *application.ProcessReversalUseCase `name:"process_rollback"`
+}
+
+func provideExecuteWagerTransactionUseCase(
+	dependencies executeWagerTransactionDependencies,
+) (*application.ExecuteWagerTransactionUseCase, error) {
+	return application.NewExecuteWagerTransactionUseCase(
+		dependencies.Submit,
+		dependencies.Bet,
+		dependencies.Win,
+		dependencies.Loss,
+		dependencies.Refund,
+		dependencies.Rollback,
+	)
+}
 
 func provideDatabaseHealthChecker(
 	pool *pgxpool.Pool,

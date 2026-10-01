@@ -12,10 +12,12 @@ var Module = fx.Module(
 	fx.Provide(
 		config.LoadHTTPConfig,
 		provideOpenWalletExecutor,
+		provideExecuteWagerTransactionExecutor,
 		NewRandomIDGenerator,
 		NewSystemClock,
 		NewOpenWalletHandler,
 		NewHealthHandler,
+		NewWagerTransactionHandler,
 		NewRouter,
 		NewServer,
 	),
@@ -32,5 +34,11 @@ func registerServerLifecycle(lifecycle fx.Lifecycle, server *Server) {
 func provideOpenWalletExecutor(
 	useCase *application.OpenWalletUseCase,
 ) OpenWalletExecutor {
+	return useCase
+}
+
+func provideExecuteWagerTransactionExecutor(
+	useCase *application.ExecuteWagerTransactionUseCase,
+) ExecuteWagerTransactionExecutor {
 	return useCase
 }

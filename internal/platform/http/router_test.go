@@ -20,7 +20,12 @@ func TestRouterRegistersOpenWalletRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHealthHandler() unexpected error: %v", err)
 	}
-	router := NewRouter(handler, healthHandler)
+	wagerHandler := newWagerTransactionHandlerForTest(
+		t,
+		&executeWagerTransactionStub{},
+		time.Now(),
+	)
+	router := NewRouter(handler, healthHandler, wagerHandler)
 
 	request := httptest.NewRequest(http.MethodGet, "/wallets", nil)
 	response := httptest.NewRecorder()
@@ -44,7 +49,12 @@ func TestRouterRegistersHealthRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHealthHandler() unexpected error: %v", err)
 	}
-	router := NewRouter(openWalletHandler, healthHandler)
+	wagerHandler := newWagerTransactionHandlerForTest(
+		t,
+		&executeWagerTransactionStub{},
+		time.Now(),
+	)
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler)
 
 	for _, path := range []string{"/health/live", "/health/ready"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -54,5 +64,34 @@ func TestRouterRegistersHealthRoutes(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want %d", path, response.Code, http.StatusOK)
 		}
+	}
+}
+
+func TestRouterRegistersWagerTransactionRoute(t *testing.T) {
+	openWalletHandler, err := NewOpenWalletHandler(
+		&openWalletExecutorStub{},
+		&sequenceIDGenerator{},
+		fixedClock{now: time.Now()},
+	)
+	if err != nil {
+		t.Fatalf("NewOpenWalletHandler() unexpected error: %v", err)
+	}
+	healthHandler, err := NewHealthHandler(&databaseHealthCheckerStub{})
+	if err != nil {
+		t.Fatalf("NewHealthHandler() unexpected error: %v", err)
+	}
+	wagerHandler := newWagerTransactionHandlerForTest(
+		t,
+		&executeWagerTransactionStub{},
+		time.Now(),
+	)
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler)
+
+	request := httptest.NewRequest(http.MethodGet, "/wagering/transactions", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /wagering/transactions status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
 	}
 }
