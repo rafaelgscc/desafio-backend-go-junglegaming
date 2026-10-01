@@ -12,6 +12,7 @@ import (
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
+	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
 )
 
 func TestWagerTransactionHandlerProcessesBet(t *testing.T) {
@@ -82,6 +83,28 @@ func TestWagerTransactionHandlerRequiresIdempotencyKey(t *testing.T) {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 	assertErrorCode(t, response, "IDEMPOTENCY_KEY_REQUIRED")
+	if executor.calls != 0 {
+		t.Fatalf("executor calls = %d, want 0", executor.calls)
+	}
+}
+
+func TestWagerTransactionHandlerRejectsProviderMismatch(t *testing.T) {
+	executor := &executeWagerTransactionStub{}
+	handler := newWagerTransactionHandlerForTest(t, executor, time.Now())
+	request := newWagerTransactionRequest(http.MethodPost, validWagerTransactionJSON())
+	request = request.WithContext(platformauth.ContextWithIdentity(
+		request.Context(),
+		platformauth.Identity{Subject: "service-account-provider-b", ProviderID: "provider-b"},
+	))
+	request.Header.Set("Idempotency-Key", "provider-a:transaction-123")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusForbidden, response.Body)
+	}
+	assertErrorCode(t, response, "PROVIDER_MISMATCH")
 	if executor.calls != 0 {
 		t.Fatalf("executor calls = %d, want 0", executor.calls)
 	}
@@ -243,7 +266,10 @@ func newWagerTransactionHandlerForTest(
 func newWagerTransactionRequest(method, body string) *http.Request {
 	request := httptest.NewRequest(method, "/wagering/transactions", bytes.NewBufferString(body))
 	request.Header.Set("Content-Type", "application/json")
-	return request
+	return request.WithContext(platformauth.ContextWithIdentity(
+		request.Context(),
+		platformauth.Identity{Subject: "service-account-provider-a", ProviderID: "provider-a"},
+	))
 }
 
 func validWagerTransactionJSON() string {

@@ -73,3 +73,39 @@ func TestLoadHTTPConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestLoadOIDCConfig(t *testing.T) {
+	t.Run("loads issuer and audience", func(t *testing.T) {
+		t.Setenv("OIDC_ISSUER_URL", "http://localhost:8081/realms/jungle")
+		t.Setenv("OIDC_AUDIENCE", "jungle-api")
+
+		config, err := LoadOIDCConfig()
+		if err != nil {
+			t.Fatalf("LoadOIDCConfig() unexpected error: %v", err)
+		}
+		if config.IssuerURL != "http://localhost:8081/realms/jungle" ||
+			config.Audience != "jungle-api" {
+			t.Fatalf("unexpected OIDC config: %#v", config)
+		}
+	})
+
+	t.Run("rejects missing issuer", func(t *testing.T) {
+		t.Setenv("OIDC_ISSUER_URL", "")
+		t.Setenv("OIDC_AUDIENCE", "jungle-api")
+
+		_, err := LoadOIDCConfig()
+		if !errors.Is(err, ErrOIDCIssuerURLRequired) {
+			t.Fatalf("LoadOIDCConfig() error = %v, want ErrOIDCIssuerURLRequired", err)
+		}
+	})
+
+	t.Run("rejects missing audience", func(t *testing.T) {
+		t.Setenv("OIDC_ISSUER_URL", "http://localhost:8081/realms/jungle")
+		t.Setenv("OIDC_AUDIENCE", "")
+
+		_, err := LoadOIDCConfig()
+		if !errors.Is(err, ErrOIDCAudienceRequired) {
+			t.Fatalf("LoadOIDCConfig() error = %v, want ErrOIDCAudienceRequired", err)
+		}
+	})
+}

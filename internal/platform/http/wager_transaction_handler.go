@@ -11,6 +11,7 @@ import (
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
+	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
 )
 
 const referenceRetryDelay = time.Minute
@@ -71,6 +72,11 @@ func (handler *WagerTransactionHandler) ServeHTTP(
 	response http.ResponseWriter,
 	request *http.Request,
 ) {
+	identity, ok := platformauth.IdentityFromContext(request.Context())
+	if !ok || identity.ProviderID == "" {
+		writeError(response, http.StatusUnauthorized, "UNAUTHORIZED", "authentication required")
+		return
+	}
 	idempotencyKey := request.Header.Get("Idempotency-Key")
 	if strings.TrimSpace(idempotencyKey) == "" {
 		writeError(
@@ -103,6 +109,10 @@ func (handler *WagerTransactionHandler) ServeHTTP(
 		writeError(response, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body")
 		return
 	}
+	if payload.ProviderID != identity.ProviderID {
+		writeError(response, http.StatusForbidden, "PROVIDER_MISMATCH", "provider identity does not match request")
+		return
+	}
 
 	ids := make([]string, 4)
 	for index := range ids {
@@ -130,7 +140,7 @@ func (handler *WagerTransactionHandler) ServeHTTP(
 			OutcomeEventID: ids[2], BalanceChangedEventID: ids[3],
 			IdempotencyKey: idempotencyKey,
 			Payload: application.WagerTransactionPayload{
-				ProviderID: payload.ProviderID, ExternalTransactionID: payload.ExternalTransactionID,
+				ProviderID: identity.ProviderID, ExternalTransactionID: payload.ExternalTransactionID,
 				PlayerID: payload.PlayerID, WalletID: payload.WalletID,
 				RoundID: payload.RoundID, GameID: payload.GameID, Kind: payload.Kind,
 				Money:                          payload.Money,

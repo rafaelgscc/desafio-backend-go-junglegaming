@@ -20,6 +20,8 @@ var (
 	ErrInvalidConnectionLimits = errors.New(
 		"DATABASE_MIN_CONNECTIONS cannot be greater than DATABASE_MAX_CONNECTIONS",
 	)
+	ErrOIDCIssuerURLRequired = errors.New("OIDC_ISSUER_URL is required")
+	ErrOIDCAudienceRequired  = errors.New("OIDC_AUDIENCE is required")
 )
 
 type PostgresConfig struct {
@@ -36,6 +38,23 @@ type HTTPConfig struct {
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
+}
+
+type OIDCConfig struct {
+	IssuerURL string
+	Audience  string
+}
+
+func LoadOIDCConfig() (OIDCConfig, error) {
+	issuerURL := strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL"))
+	if issuerURL == "" {
+		return OIDCConfig{}, ErrOIDCIssuerURLRequired
+	}
+	audience := strings.TrimSpace(os.Getenv("OIDC_AUDIENCE"))
+	if audience == "" {
+		return OIDCConfig{}, ErrOIDCAudienceRequired
+	}
+	return OIDCConfig{IssuerURL: issuerURL, Audience: audience}, nil
 }
 
 func LoadHTTPConfig() (HTTPConfig, error) {

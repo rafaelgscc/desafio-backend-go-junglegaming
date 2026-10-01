@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
+	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
 	httpadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/http"
 	platformpostgres "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/postgres"
 )
@@ -157,6 +158,10 @@ func performWagerTransactionRequest(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Idempotency-Key", idempotencyKey)
 	request.Header.Set("X-Correlation-ID", "correlation-1")
+	request = request.WithContext(platformauth.ContextWithIdentity(
+		request.Context(),
+		platformauth.Identity{Subject: "service-account-provider-a", ProviderID: "provider-a"},
+	))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	return response
