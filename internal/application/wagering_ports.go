@@ -13,17 +13,29 @@ type WageringTransaction interface {
 		ctx context.Context,
 		transactionID string,
 	) (domain.WagerTransaction, error)
+	FindWagerTransactionByIdempotencyKeyForUpdate(
+		ctx context.Context,
+		providerID string,
+		idempotencyKey string,
+	) (domain.WagerTransaction, error)
 	FindWagerTransactionByExternalIDForUpdate(
 		ctx context.Context,
 		providerID string,
 		externalTransactionID string,
 	) (domain.WagerTransaction, error)
 	FindWalletForUpdate(ctx context.Context, walletID string) (domain.Wallet, error)
+	WalletExistsForPlayerAndCurrency(
+		ctx context.Context,
+		playerID string,
+		currency string,
+	) (bool, error)
 	HasProcessedReversal(
 		ctx context.Context,
 		referenceTransactionID string,
 		kind domain.WagerTransactionKind,
 	) (bool, error)
+	InsertWagerTransaction(ctx context.Context, transaction domain.WagerTransaction) error
+	InsertWallet(ctx context.Context, wallet domain.Wallet) error
 	SaveWagerTransaction(ctx context.Context, transaction domain.WagerTransaction) error
 	SaveWallet(ctx context.Context, wallet domain.Wallet) error
 	AppendWalletLedgerEntry(ctx context.Context, entry domain.WalletLedgerEntry) error

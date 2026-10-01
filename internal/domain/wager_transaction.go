@@ -18,6 +18,9 @@ var (
 	ErrReferenceExternalTransactionIDRequired = errors.New(
 		"reference external transaction ID is required",
 	)
+	ErrUnexpectedReferenceExternalTransactionID = errors.New(
+		"reference external transaction ID is not allowed for this transaction kind",
+	)
 	ErrInvalidWagerTransactionTransition = errors.New(
 		"invalid wager transaction state transition",
 	)
@@ -732,6 +735,11 @@ func validateNewExternalWagerTransactionParams(
 		WagerTransactionKindRollback:
 		if params.ReferenceExternalTransactionID == "" {
 			return ErrReferenceExternalTransactionIDRequired
+		}
+	case WagerTransactionKindBet,
+		WagerTransactionKindLoss:
+		if params.ReferenceExternalTransactionID != "" {
+			return ErrUnexpectedReferenceExternalTransactionID
 		}
 	}
 

@@ -290,6 +290,11 @@ type fakeWageringUnitOfWork struct {
 	referencedTransaction domain.WagerTransaction
 	referenceErr          error
 	hasProcessedReversal  bool
+	idempotentTransaction domain.WagerTransaction
+	idempotencyErr        error
+	insertedTransaction   bool
+	walletExists          bool
+	insertedWallet        bool
 }
 
 func (unitOfWork *fakeWageringUnitOfWork) WithinTransaction(
@@ -309,6 +314,9 @@ func (unitOfWork *fakeWageringUnitOfWork) WithinTransaction(
 		referencedTransaction: unitOfWork.referencedTransaction,
 		referenceErr:          unitOfWork.referenceErr,
 		hasProcessedReversal:  unitOfWork.hasProcessedReversal,
+		idempotentTransaction: unitOfWork.idempotentTransaction,
+		idempotencyErr:        unitOfWork.idempotencyErr,
+		walletExists:          unitOfWork.walletExists,
 	}
 	if err := fn(working); err != nil {
 		return err
@@ -318,6 +326,8 @@ func (unitOfWork *fakeWageringUnitOfWork) WithinTransaction(
 	unitOfWork.transaction = working.transaction
 	unitOfWork.ledgerEntry = working.ledgerEntry
 	unitOfWork.outboxEvents = working.outboxEvents
+	unitOfWork.insertedTransaction = working.insertedTransaction
+	unitOfWork.insertedWallet = working.insertedWallet
 	return nil
 }
 
@@ -331,6 +341,11 @@ type fakeWageringTransaction struct {
 	referencedTransaction domain.WagerTransaction
 	referenceErr          error
 	hasProcessedReversal  bool
+	idempotentTransaction domain.WagerTransaction
+	idempotencyErr        error
+	insertedTransaction   bool
+	walletExists          bool
+	insertedWallet        bool
 }
 
 func (tx *fakeWageringTransaction) FindWagerTransactionForUpdate(
@@ -347,6 +362,14 @@ func (tx *fakeWageringTransaction) FindWalletForUpdate(
 	return tx.wallet, nil
 }
 
+func (tx *fakeWageringTransaction) WalletExistsForPlayerAndCurrency(
+	_ context.Context,
+	_ string,
+	_ string,
+) (bool, error) {
+	return tx.walletExists, nil
+}
+
 func (tx *fakeWageringTransaction) FindWagerTransactionByExternalIDForUpdate(
 	_ context.Context,
 	_ string,
@@ -356,6 +379,17 @@ func (tx *fakeWageringTransaction) FindWagerTransactionByExternalIDForUpdate(
 		return domain.WagerTransaction{}, tx.referenceErr
 	}
 	return tx.referencedTransaction, nil
+}
+
+func (tx *fakeWageringTransaction) FindWagerTransactionByIdempotencyKeyForUpdate(
+	_ context.Context,
+	_ string,
+	_ string,
+) (domain.WagerTransaction, error) {
+	if tx.idempotencyErr != nil {
+		return domain.WagerTransaction{}, tx.idempotencyErr
+	}
+	return tx.idempotentTransaction, nil
 }
 
 func (tx *fakeWageringTransaction) HasProcessedReversal(
@@ -371,6 +405,24 @@ func (tx *fakeWageringTransaction) SaveWagerTransaction(
 	transaction domain.WagerTransaction,
 ) error {
 	tx.transaction = transaction
+	return nil
+}
+
+func (tx *fakeWageringTransaction) InsertWagerTransaction(
+	_ context.Context,
+	transaction domain.WagerTransaction,
+) error {
+	tx.transaction = transaction
+	tx.insertedTransaction = true
+	return nil
+}
+
+func (tx *fakeWageringTransaction) InsertWallet(
+	_ context.Context,
+	wallet domain.Wallet,
+) error {
+	tx.wallet = wallet
+	tx.insertedWallet = true
 	return nil
 }
 

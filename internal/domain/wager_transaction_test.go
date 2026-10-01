@@ -1275,6 +1275,7 @@ func TestRehydrateWagerTransactionRejectsInvalidPendingReferenceState(t *testing
 			name: "pending reference for non reversal kind",
 			mutate: func(params *RehydrateWagerTransactionParams) {
 				params.Kind = WagerTransactionKindBet
+				params.ReferenceExternalTransactionID = ""
 			},
 		},
 	}
@@ -1892,6 +1893,35 @@ func TestRehydrateWagerTransactionValidatesResolvedReference(t *testing.T) {
 			t.Fatalf("RehydrateWagerTransaction() error = %v, want ErrUnexpectedReferenceTransactionID", err)
 		}
 	})
+}
+
+func TestNewExternalWagerTransactionRejectsReferenceForUnsupportedKind(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range []WagerTransactionKind{
+		WagerTransactionKindBet,
+		WagerTransactionKindLoss,
+	} {
+		kind := kind
+		t.Run(string(kind), func(t *testing.T) {
+			t.Parallel()
+			params := validExternalWagerTransactionParams(t)
+			params.Kind = kind
+			params.ReferenceExternalTransactionID = "unexpected-reference"
+			if kind == WagerTransactionKindLoss {
+				zero, err := NewMoney("0.00", "BRL")
+				if err != nil {
+					t.Fatalf("NewMoney() unexpected setup error: %v", err)
+				}
+				params.Money = zero
+			}
+
+			_, err := NewExternalWagerTransaction(params)
+			if !errors.Is(err, ErrUnexpectedReferenceExternalTransactionID) {
+				t.Fatalf("NewExternalWagerTransaction() error = %v, want ErrUnexpectedReferenceExternalTransactionID", err)
+			}
+		})
+	}
 }
 
 func validProcessedWagerTransactionRehydrateParams(
