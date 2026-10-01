@@ -16,6 +16,7 @@ var ErrDatabaseExecutorRequired = errors.New("database executor is required")
 
 type DBTX interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
@@ -125,6 +126,38 @@ func (repository *WalletRepository) FindWalletForUpdate(
 		return domain.Wallet{}, fmt.Errorf("rehydrate wallet: %w", err)
 	}
 
+	return wallet, nil
+}
+
+func (repository *WalletRepository) FindWallet(
+	ctx context.Context,
+	walletID string,
+) (domain.Wallet, error) {
+	return scanWallet(repository.db.QueryRow(ctx, `
+		SELECT id, player_id, currency, balance_in_cents, version, created_at, updated_at
+		FROM wallets
+		WHERE id = $1
+	`, walletID))
+}
+
+func scanWallet(row pgx.Row) (domain.Wallet, error) {
+	var id, playerID, currency string
+	var balanceInCents, version int64
+	var createdAt, updatedAt time.Time
+	if err := row.Scan(&id, &playerID, &currency, &balanceInCents, &version, &createdAt, &updatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Wallet{}, application.ErrWalletNotFound
+		}
+		return domain.Wallet{}, fmt.Errorf("scan wallet: %w", err)
+	}
+	balance, err := moneyFromCents(balanceInCents, currency)
+	if err != nil {
+		return domain.Wallet{}, fmt.Errorf("restore wallet balance: %w", err)
+	}
+	wallet, err := domain.RehydrateWallet(id, playerID, balance, version, createdAt, updatedAt)
+	if err != nil {
+		return domain.Wallet{}, fmt.Errorf("rehydrate wallet: %w", err)
+	}
 	return wallet, nil
 }
 

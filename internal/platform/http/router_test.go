@@ -28,7 +28,7 @@ func TestRouterRegistersOpenWalletRoute(t *testing.T) {
 		&executeWagerTransactionStub{},
 		time.Now(),
 	)
-	router := NewRouter(handler, healthHandler, wagerHandler, newRouterAuthMiddleware(t))
+	router := NewRouter(handler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
 
 	request := httptest.NewRequest(http.MethodGet, "/wallets", nil)
 	response := httptest.NewRecorder()
@@ -57,7 +57,7 @@ func TestRouterRegistersHealthRoutes(t *testing.T) {
 		&executeWagerTransactionStub{},
 		time.Now(),
 	)
-	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, newRouterAuthMiddleware(t))
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
 
 	for _, path := range []string{"/health/live", "/health/ready"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -88,7 +88,7 @@ func TestRouterRegistersWagerTransactionRoute(t *testing.T) {
 		&executeWagerTransactionStub{},
 		time.Now(),
 	)
-	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, newRouterAuthMiddleware(t))
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
 
 	request := httptest.NewRequest(http.MethodGet, "/wagering/transactions", nil)
 	response := httptest.NewRecorder()
@@ -113,22 +113,28 @@ func TestRouterProtectsBusinessRoutes(t *testing.T) {
 		t.Fatalf("NewHealthHandler() unexpected error: %v", err)
 	}
 	wagerHandler := newWagerTransactionHandlerForTest(t, &executeWagerTransactionStub{}, time.Now())
-	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, newRouterAuthMiddleware(t))
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
 
 	testCases := []struct {
 		name          string
+		method        string
 		path          string
 		authorization string
 		wantStatus    int
 	}{
-		{name: "wallet without token", path: "/wallets", wantStatus: http.StatusUnauthorized},
-		{name: "wallet with provider token", path: "/wallets", authorization: "Bearer provider", wantStatus: http.StatusForbidden},
-		{name: "wager without token", path: "/wagering/transactions", wantStatus: http.StatusUnauthorized},
-		{name: "wager with internal token", path: "/wagering/transactions", authorization: "Bearer internal", wantStatus: http.StatusForbidden},
+		{name: "wallet without token", method: http.MethodPost, path: "/wallets", wantStatus: http.StatusUnauthorized},
+		{name: "wallet with provider token", method: http.MethodPost, path: "/wallets", authorization: "Bearer provider", wantStatus: http.StatusForbidden},
+		{name: "wallet query without token", method: http.MethodGet, path: "/wallets/wallet-1", wantStatus: http.StatusUnauthorized},
+		{name: "ledger with provider token", method: http.MethodGet, path: "/wallets/wallet-1/ledger", authorization: "Bearer provider", wantStatus: http.StatusForbidden},
+		{name: "reconciliation without token", method: http.MethodPost, path: "/wallets/wallet-1/reconciliation", wantStatus: http.StatusUnauthorized},
+		{name: "wager without token", method: http.MethodPost, path: "/wagering/transactions", wantStatus: http.StatusUnauthorized},
+		{name: "wager with internal token", method: http.MethodPost, path: "/wagering/transactions", authorization: "Bearer internal", wantStatus: http.StatusForbidden},
+		{name: "wager query without token", method: http.MethodGet, path: "/wagering/transactions/transaction-1", wantStatus: http.StatusUnauthorized},
+		{name: "external wager query with internal token", method: http.MethodGet, path: "/providers/provider-a/wagering/transactions/external-1", authorization: "Bearer internal", wantStatus: http.StatusForbidden},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, testCase.path, nil)
+			request := httptest.NewRequest(testCase.method, testCase.path, nil)
 			request.Header.Set("Authorization", testCase.authorization)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)

@@ -24,6 +24,11 @@ var Module = fx.Module(
 			platformpostgres.NewPostgresWageringUnitOfWork,
 			fx.As(new(application.WageringUnitOfWork)),
 		),
+		fx.Annotate(
+			platformpostgres.NewWageringQueryRepository,
+			fx.As(new(application.WageringQueryRepository)),
+		),
+		application.NewWageringQueryService,
 		application.NewOpenWalletUseCase,
 		application.NewSubmitWagerTransactionUseCase,
 		application.NewProcessBetUseCase,

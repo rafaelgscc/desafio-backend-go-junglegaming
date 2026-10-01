@@ -63,6 +63,32 @@ func (repository *WagerTransactionRepository) FindWagerTransactionForUpdate(
 	))
 }
 
+func (repository *WagerTransactionRepository) FindWagerTransactionForProvider(
+	ctx context.Context,
+	providerID string,
+	transactionID string,
+) (domain.WagerTransaction, error) {
+	return scanWagerTransaction(repository.db.QueryRow(
+		ctx,
+		selectWagerTransaction+" WHERE provider_id = $1 AND id = $2",
+		providerID,
+		transactionID,
+	))
+}
+
+func (repository *WagerTransactionRepository) FindWagerTransactionByExternalID(
+	ctx context.Context,
+	providerID string,
+	externalTransactionID string,
+) (domain.WagerTransaction, error) {
+	return scanWagerTransaction(repository.db.QueryRow(
+		ctx,
+		selectWagerTransaction+" WHERE provider_id = $1 AND external_transaction_id = $2",
+		providerID,
+		externalTransactionID,
+	))
+}
+
 func (repository *WagerTransactionRepository) FindWagerTransactionByIdempotencyKeyForUpdate(
 	ctx context.Context,
 	providerID string,

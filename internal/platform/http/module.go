@@ -15,11 +15,13 @@ var Module = fx.Module(
 		config.LoadHTTPConfig,
 		provideOpenWalletExecutor,
 		provideExecuteWagerTransactionExecutor,
+		provideWageringQueryExecutor,
 		NewRandomIDGenerator,
 		NewSystemClock,
 		NewOpenWalletHandler,
 		NewHealthHandler,
 		NewWagerTransactionHandler,
+		NewWageringQueryHandler,
 		NewRouter,
 		NewServer,
 	),
@@ -31,6 +33,12 @@ func registerServerLifecycle(lifecycle fx.Lifecycle, server *Server) {
 		OnStart: server.Start,
 		OnStop:  server.Stop,
 	})
+}
+
+func provideWageringQueryExecutor(
+	service *application.WageringQueryService,
+) WageringQueryExecutor {
+	return service
 }
 
 func provideOpenWalletExecutor(
