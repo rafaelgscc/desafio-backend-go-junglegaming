@@ -145,6 +145,62 @@ func TestExecuteWagerTransactionReturnsTerminalReplayWithoutProcessing(t *testin
 	}
 }
 
+func TestExecuteWagerTransactionReloadsWhenAnotherInstanceFinishesFirst(t *testing.T) {
+	t.Parallel()
+
+	balance, _ := domain.NewMoney("75.00", "BRL")
+	submitCalls := 0
+	submit := submitWagerExecutorFunc(func(
+		context.Context,
+		SubmitWagerTransactionCommand,
+	) (SubmitWagerTransactionResult, error) {
+		submitCalls++
+		if submitCalls == 1 {
+			return SubmitWagerTransactionResult{
+				TransactionID: "transaction-1",
+				Status:        domain.WagerTransactionStatusPending,
+			}, nil
+		}
+		return SubmitWagerTransactionResult{
+			TransactionID: "transaction-1", Status: domain.WagerTransactionStatusProcessed,
+			Balance: balance, HasBalance: true, IdempotentReplay: true,
+		}, nil
+	})
+	invalidTransition := betProcessorFunc(func(
+		context.Context,
+		ProcessBetCommand,
+	) (ProcessBetResult, error) {
+		return ProcessBetResult{}, domain.ErrInvalidWagerTransactionTransition
+	})
+	unusedWin := winProcessorFunc(func(context.Context, ProcessWinCommand) (ProcessWinResult, error) {
+		return ProcessWinResult{}, nil
+	})
+	unusedLoss := lossProcessorFunc(func(context.Context, ProcessLossCommand) (ProcessLossResult, error) {
+		return ProcessLossResult{}, nil
+	})
+	unusedReversal := reversalProcessorFunc(func(context.Context, ProcessReversalCommand) (ProcessReversalResult, error) {
+		return ProcessReversalResult{}, nil
+	})
+	useCase, err := NewExecuteWagerTransactionUseCase(
+		submit, invalidTransition, unusedWin, unusedLoss, unusedReversal, unusedReversal,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := useCase.Execute(
+		context.Background(),
+		executeWagerTransactionCommandFixture(t, domain.WagerTransactionKindBet),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if submitCalls != 2 || result.Status != domain.WagerTransactionStatusProcessed ||
+		!result.HasBalance || result.Balance.Amount() != "75.00" || result.IdempotentReplay {
+		t.Fatalf("submit calls=%d result=%#v", submitCalls, result)
+	}
+}
+
 func TestExecuteWagerTransactionRejectsOpening(t *testing.T) {
 	t.Parallel()
 

@@ -153,6 +153,14 @@ func TestWagerTransactionHandlerMapsResultsAndErrors(t *testing.T) {
 			name: "concurrent update", err: application.ErrConcurrentWalletUpdate,
 			wantStatus: http.StatusServiceUnavailable, wantCode: "TEMPORARILY_UNAVAILABLE",
 		},
+		{
+			name: "currency mismatch", err: domain.ErrCurrencyMismatch,
+			wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST",
+		},
+		{
+			name: "wallet player mismatch", err: application.ErrWagerPlayerMismatch,
+			wantStatus: http.StatusBadRequest, wantCode: "INVALID_REQUEST",
+		},
 	}
 
 	for _, testCase := range testCases {

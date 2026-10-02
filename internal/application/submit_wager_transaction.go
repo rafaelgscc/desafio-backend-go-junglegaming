@@ -114,7 +114,8 @@ func (useCase *SubmitWagerTransactionUseCase) Execute(
 	})
 	if err != nil {
 		if errors.Is(err, ErrIdempotencyKeyConflict) ||
-			errors.Is(err, ErrExternalTransactionConflict) {
+			errors.Is(err, ErrExternalTransactionConflict) ||
+			errors.Is(err, ErrWagerTransactionAlreadyExists) {
 			return useCase.resolveConcurrentSubmission(ctx, command, err)
 		}
 		return SubmitWagerTransactionResult{}, err

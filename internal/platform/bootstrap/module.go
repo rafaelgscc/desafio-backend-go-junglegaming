@@ -10,7 +10,9 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/config"
 	httpadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/http"
+	outboxworker "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/outbox"
 	platformpostgres "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/postgres"
+	referenceworker "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/referenceworker"
 	sqsadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/sqs"
 )
 
@@ -18,6 +20,8 @@ var Module = fx.Module(
 	"bootstrap",
 	httpadapter.Module,
 	sqsadapter.Module,
+	outboxworker.Module,
+	referenceworker.Module,
 	fx.Provide(
 		config.LoadPostgresConfig,
 		providePostgresPool,
@@ -32,8 +36,16 @@ var Module = fx.Module(
 		),
 		application.NewWageringQueryService,
 		fx.Annotate(
+			platformpostgres.NewOutboxDeliveryRepository,
+			fx.As(new(application.OutboxDeliveryRepository)),
+		),
+		fx.Annotate(
 			platformpostgres.NewInboxRepository,
 			fx.As(new(application.InboxRepository)),
+		),
+		fx.Annotate(
+			platformpostgres.NewPendingReferenceRepository,
+			fx.As(new(application.PendingReferenceRepository)),
 		),
 		application.NewOpenWalletUseCase,
 		application.NewSubmitWagerTransactionUseCase,
@@ -49,10 +61,40 @@ var Module = fx.Module(
 			fx.ResultTags(`name:"process_rollback"`),
 		),
 		provideExecuteWagerTransactionUseCase,
+		application.NewExpirePendingReferenceUseCase,
+		provideRetryPendingReferencesUseCase,
 		provideWagerMessageExecutor,
 		application.NewConsumeWagerMessageUseCase,
+		provideIntegrationEventPublisher,
+		application.NewPublishOutboxBatchUseCase,
 	),
 )
+
+type retryPendingReferencesDependencies struct {
+	fx.In
+
+	Repository application.PendingReferenceRepository
+	Refund     *application.ProcessReversalUseCase `name:"process_refund"`
+	Rollback   *application.ProcessReversalUseCase `name:"process_rollback"`
+	Expirer    *application.ExpirePendingReferenceUseCase
+}
+
+func provideRetryPendingReferencesUseCase(
+	dependencies retryPendingReferencesDependencies,
+) (*application.RetryPendingReferencesUseCase, error) {
+	return application.NewRetryPendingReferencesUseCase(
+		dependencies.Repository,
+		dependencies.Refund,
+		dependencies.Rollback,
+		dependencies.Expirer,
+	)
+}
+
+func provideIntegrationEventPublisher(
+	publisher *sqsadapter.EventPublisher,
+) application.IntegrationEventPublisher {
+	return publisher
+}
 
 func provideWagerMessageExecutor(
 	useCase *application.ExecuteWagerTransactionUseCase,

@@ -22,11 +22,13 @@ type Client interface {
 	ReceiveMessage(context.Context, *sqs.ReceiveMessageInput, ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error)
 	DeleteMessage(context.Context, *sqs.DeleteMessageInput, ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error)
 	ChangeMessageVisibility(context.Context, *sqs.ChangeMessageVisibilityInput, ...func(*sqs.Options)) (*sqs.ChangeMessageVisibilityOutput, error)
+	SendMessage(context.Context, *sqs.SendMessageInput, ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
 }
 
 type Transport struct {
-	client   Client
-	queueURL string
+	client        Client
+	queueURL      string
+	eventQueueURL string
 }
 
 func NewTransport(sqsConfig config.SQSConfig) (*Transport, error) {
@@ -47,10 +49,15 @@ func NewTransport(sqsConfig config.SQSConfig) (*Transport, error) {
 			options.BaseEndpoint = aws.String(sqsConfig.Endpoint)
 		}
 	})
-	return newTransport(ctx, client, sqsConfig.QueueName)
+	return newTransport(ctx, client, sqsConfig.QueueName, sqsConfig.EventQueueName)
 }
 
-func newTransport(ctx context.Context, client Client, queueName string) (*Transport, error) {
+func newTransport(
+	ctx context.Context,
+	client Client,
+	queueName string,
+	eventQueueName string,
+) (*Transport, error) {
 	if client == nil {
 		return nil, ErrTransportRequired
 	}
@@ -61,16 +68,29 @@ func newTransport(ctx context.Context, client Client, queueName string) (*Transp
 	if output.QueueUrl == nil || *output.QueueUrl == "" {
 		return nil, fmt.Errorf("resolve SQS queue %q: empty URL", queueName)
 	}
-	return &Transport{client: client, queueURL: *output.QueueUrl}, nil
+	eventOutput, err := client.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
+		QueueName: aws.String(eventQueueName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve SQS queue %q: %w", eventQueueName, err)
+	}
+	if eventOutput.QueueUrl == nil || *eventOutput.QueueUrl == "" {
+		return nil, fmt.Errorf("resolve SQS queue %q: empty URL", eventQueueName)
+	}
+	return &Transport{
+		client: client, queueURL: *output.QueueUrl, eventQueueURL: *eventOutput.QueueUrl,
+	}, nil
 }
 
 func (transport *Transport) Ping(ctx context.Context) error {
-	_, err := transport.client.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
-		QueueUrl:       aws.String(transport.queueURL),
-		AttributeNames: []types.QueueAttributeName{types.QueueAttributeNameQueueArn},
-	})
-	if err != nil {
-		return fmt.Errorf("ping SQS: %w", err)
+	for _, queueURL := range []string{transport.queueURL, transport.eventQueueURL} {
+		_, err := transport.client.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
+			QueueUrl:       aws.String(queueURL),
+			AttributeNames: []types.QueueAttributeName{types.QueueAttributeNameQueueArn},
+		})
+		if err != nil {
+			return fmt.Errorf("ping SQS queue %q: %w", queueURL, err)
+		}
 	}
 	return nil
 }

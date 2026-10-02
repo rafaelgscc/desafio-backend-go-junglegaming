@@ -118,6 +118,19 @@ func TestConsumeWagerMessageRejectsInvalidEnvelopeBeforeInbox(t *testing.T) {
 	}
 }
 
+func TestConsumeWagerMessageRejectsInvalidRetryScheduleBeforeInbox(t *testing.T) {
+	inbox := &inboxRepositoryStub{claimStatus: InboxClaimed}
+	useCase, _ := NewConsumeWagerMessageUseCase(inbox, &wagerMessageExecutorStub{})
+	now := time.Now().UTC()
+	_, err := useCase.Execute(
+		context.Background(), validWagerMessage(), "worker-1",
+		now, now.Add(time.Minute), now,
+	)
+	if !errors.Is(err, ErrInvalidWagerMessage) || inbox.message.MessageID != "" {
+		t.Fatalf("error=%v claimed=%#v", err, inbox.message)
+	}
+}
+
 func validWagerMessage() []byte {
 	return []byte(`{
 		"messageId":"message-1",

@@ -2,8 +2,8 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +43,12 @@ func TestLocalStackProvisionsFIFOQueueAndDLQ(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("resolve DLQ: %v", err)
 	}
+	eventQueue, err := client.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{
+		QueueName: aws.String("integration-events.fifo"),
+	})
+	if err != nil {
+		t.Fatalf("resolve integration event queue: %v", err)
+	}
 	attributes, err := client.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
 		QueueUrl: mainQueue.QueueUrl,
 		AttributeNames: []types.QueueAttributeName{
@@ -53,8 +59,18 @@ func TestLocalStackProvisionsFIFOQueueAndDLQ(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var redrivePolicy struct {
+		DeadLetterTargetARN string `json:"deadLetterTargetArn"`
+		MaxReceiveCount     string `json:"maxReceiveCount"`
+	}
+	if err := json.Unmarshal(
+		[]byte(attributes.Attributes[string(types.QueueAttributeNameRedrivePolicy)]),
+		&redrivePolicy,
+	); err != nil {
+		t.Fatalf("decode redrive policy: %v", err)
+	}
 	if attributes.Attributes[string(types.QueueAttributeNameFifoQueue)] != "true" ||
-		!strings.Contains(attributes.Attributes[string(types.QueueAttributeNameRedrivePolicy)], "maxReceiveCount") {
+		redrivePolicy.DeadLetterTargetARN == "" || redrivePolicy.MaxReceiveCount != "5" {
 		t.Fatalf("queue attributes = %#v", attributes.Attributes)
 	}
 
@@ -74,4 +90,10 @@ func TestLocalStackProvisionsFIFOQueueAndDLQ(t *testing.T) {
 	_, _ = client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
 		QueueUrl: mainQueue.QueueUrl, ReceiptHandle: received.Messages[0].ReceiptHandle,
 	})
+	if _, err := client.SendMessage(ctx, &sqs.SendMessageInput{
+		QueueUrl: eventQueue.QueueUrl, MessageBody: aws.String(`{"eventId":"event-1"}`),
+		MessageGroupId: aws.String("wallet-1"), MessageDeduplicationId: aws.String("event-1"),
+	}); err != nil {
+		t.Fatalf("send integration event: %v", err)
+	}
 }

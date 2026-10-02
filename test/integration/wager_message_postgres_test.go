@@ -2,6 +2,9 @@ package integration_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -74,10 +77,28 @@ func TestWagerMessageAtomicallyCompletesFinancialStateAndInbox(t *testing.T) {
 		"walletId":"wallet-1","roundId":"round-1","gameId":"game-1","kind":"BET",
 		"money":{"amount":"25.00","currency":"BRL"}}
 	}`)
+	payloadHash := sha256.Sum256(body)
+	claim, err := inbox.Claim(ctx, application.InboxMessage{
+		ConsumerName: application.WagerTransactionsConsumerName,
+		MessageID:    "message-1", EventID: "message-1",
+		EventType:   "WagerTransactionRequested",
+		PayloadHash: "sha256:" + hex.EncodeToString(payloadHash[:]), Payload: body,
+		ReceivedAt: now.Add(time.Second),
+	}, "crashed-worker", now.Add(31*time.Second))
+	if err != nil || claim != application.InboxClaimed {
+		t.Fatalf("crashed worker claim = %q, error %v", claim, err)
+	}
+	busy, err := consumer.Execute(
+		ctx, body, "worker-1", now.Add(2*time.Second),
+		now.Add(32*time.Second), now.Add(3*time.Second),
+	)
+	if !errors.Is(err, application.ErrInboxMessageBusy) || busy.DeleteFromQueue {
+		t.Fatalf("busy consume result = %#v, error = %v", busy, err)
+	}
 
 	result, err := consumer.Execute(
-		ctx, body, "worker-1", now.Add(time.Second),
-		now.Add(31*time.Second), now.Add(2*time.Second),
+		ctx, body, "worker-1", now.Add(32*time.Second),
+		now.Add(62*time.Second), now.Add(33*time.Second),
 	)
 	if err != nil || !result.DeleteFromQueue {
 		t.Fatalf("first consume result = %#v, error = %v", result, err)
@@ -105,8 +126,8 @@ func TestWagerMessageAtomicallyCompletesFinancialStateAndInbox(t *testing.T) {
 	}
 
 	replay, err := consumer.Execute(
-		ctx, body, "worker-2", now.Add(time.Minute),
-		now.Add(90*time.Second), now.Add(61*time.Second),
+		ctx, body, "worker-2", now.Add(2*time.Minute),
+		now.Add(150*time.Second), now.Add(121*time.Second),
 	)
 	if err != nil || !replay.DeleteFromQueue || !replay.AlreadyProcessed {
 		t.Fatalf("replay result = %#v, error = %v", replay, err)

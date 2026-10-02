@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestLoadPostgresConfig(t *testing.T) {
@@ -115,13 +116,15 @@ func TestLoadSQSConfig(t *testing.T) {
 		t.Setenv("AWS_REGION", "us-east-1")
 		t.Setenv("SQS_ENDPOINT", "http://localhost:4566")
 		t.Setenv("SQS_QUEUE_NAME", "wager-transactions.fifo")
+		t.Setenv("SQS_EVENT_QUEUE_NAME", "integration-events.fifo")
 		t.Setenv("SQS_WORKER_ID", "worker-1")
 		config, err := LoadSQSConfig()
 		if err != nil {
 			t.Fatal(err)
 		}
 		if config.Region != "us-east-1" || config.Endpoint != "http://localhost:4566" ||
-			config.QueueName != "wager-transactions.fifo" || config.WorkerID != "worker-1" {
+			config.QueueName != "wager-transactions.fifo" ||
+			config.EventQueueName != "integration-events.fifo" || config.WorkerID != "worker-1" {
 			t.Fatalf("SQS config = %#v", config)
 		}
 	})
@@ -132,4 +135,40 @@ func TestLoadSQSConfig(t *testing.T) {
 			t.Fatalf("LoadSQSConfig() error = %v", err)
 		}
 	})
+}
+
+func TestLoadOutboxConfig(t *testing.T) {
+	t.Setenv("OUTBOX_WORKER_ID", "publisher-1")
+	config, err := LoadOutboxConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.WorkerID != "publisher-1" || config.BatchSize != 20 ||
+		config.PollInterval <= 0 || config.LeaseDuration <= 0 {
+		t.Fatalf("outbox config = %#v", config)
+	}
+}
+
+func TestLoadReferenceWorkerConfig(t *testing.T) {
+	t.Setenv("REFERENCE_WORKER_ID", "reference-1")
+	t.Setenv("REFERENCE_WORKER_BATCH_SIZE", "8")
+	t.Setenv("REFERENCE_WORKER_POLL_INTERVAL", "250ms")
+	t.Setenv("REFERENCE_WORKER_LEASE_DURATION", "45s")
+	t.Setenv("REFERENCE_WORKER_RETRY_BASE_DELAY", "2m")
+	t.Setenv("REFERENCE_WORKER_MAX_ATTEMPTS", "7")
+	workerConfig, err := LoadReferenceWorkerConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workerConfig.WorkerID != "reference-1" || workerConfig.BatchSize != 8 ||
+		workerConfig.PollInterval != 250*time.Millisecond ||
+		workerConfig.LeaseDuration != 45*time.Second ||
+		workerConfig.RetryBaseDelay != 2*time.Minute || workerConfig.MaxAttempts != 7 {
+		t.Fatalf("reference worker config = %#v", workerConfig)
+	}
+
+	t.Setenv("REFERENCE_WORKER_MAX_ATTEMPTS", "0")
+	if _, err := LoadReferenceWorkerConfig(); !errors.Is(err, ErrInvalidWorkerConfig) {
+		t.Fatalf("LoadReferenceWorkerConfig() error = %v", err)
+	}
 }

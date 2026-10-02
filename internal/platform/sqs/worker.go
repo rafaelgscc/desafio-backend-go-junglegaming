@@ -116,7 +116,8 @@ func (worker *Worker) processByGroup(ctx context.Context, messages []types.Messa
 			defer waitGroup.Done()
 			for _, message := range group {
 				if ctx.Err() != nil {
-					return
+					worker.releaseMessage(message)
+					continue
 				}
 				worker.processMessage(ctx, message)
 			}
@@ -142,21 +143,47 @@ func (worker *Worker) processMessage(ctx context.Context, message types.Message)
 		})
 		if deleteErr != nil && ctx.Err() == nil {
 			slog.Error("sqs delete failed", "messageId", result.MessageID, "error", deleteErr)
+		} else if deleteErr != nil {
+			worker.releaseMessage(message)
 		}
 		return
 	}
 	if errors.Is(err, application.ErrInboxMessageBusy) {
 		retryDelay = time.Second
 	}
+	visibilityContext := ctx
+	cancelVisibility := func() {}
+	if ctx.Err() != nil {
+		// The shutdown deadline interrupted processing. Release the message with a
+		// fresh bounded context so another instance can resume it immediately.
+		retryDelay = 0
+		visibilityContext, cancelVisibility = context.WithTimeout(context.Background(), 2*time.Second)
+	}
+	defer cancelVisibility()
 	_, visibilityErr := worker.transport.client.ChangeMessageVisibility(
-		ctx,
+		visibilityContext,
 		&sqs.ChangeMessageVisibilityInput{
 			QueueUrl: worker.transportQueueURL(), ReceiptHandle: message.ReceiptHandle,
 			VisibilityTimeout: int32(retryDelay / time.Second),
 		},
 	)
-	if visibilityErr != nil && ctx.Err() == nil {
+	if visibilityErr != nil {
 		slog.Error("sqs visibility change failed", "messageId", result.MessageID, "error", visibilityErr)
+	}
+}
+
+func (worker *Worker) releaseMessage(message types.Message) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := worker.transport.client.ChangeMessageVisibility(
+		ctx,
+		&sqs.ChangeMessageVisibilityInput{
+			QueueUrl: worker.transportQueueURL(), ReceiptHandle: message.ReceiptHandle,
+			VisibilityTimeout: 0,
+		},
+	)
+	if err != nil {
+		slog.Error("sqs message release failed", "error", err)
 	}
 }
 

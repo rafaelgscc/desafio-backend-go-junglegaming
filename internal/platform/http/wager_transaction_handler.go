@@ -207,6 +207,8 @@ func isInvalidWagerTransactionError(err error) bool {
 	return errors.Is(err, application.ErrInvalidExecuteWagerTransactionCommand) ||
 		errors.Is(err, application.ErrInvalidProcessWagerCommand) ||
 		errors.Is(err, application.ErrInvalidProcessReversalCommand) ||
+		errors.Is(err, application.ErrWagerWalletMismatch) ||
+		errors.Is(err, application.ErrWagerPlayerMismatch) ||
 		errors.Is(err, domain.ErrInvalidWagerTransactionID) ||
 		errors.Is(err, domain.ErrInvalidExternalTransactionID) ||
 		errors.Is(err, domain.ErrInvalidProviderID) ||
@@ -219,6 +221,9 @@ func isInvalidWagerTransactionError(err error) bool {
 		errors.Is(err, domain.ErrInvalidWagerTransactionKind) ||
 		errors.Is(err, domain.ErrInvalidAmount) ||
 		errors.Is(err, domain.ErrInvalidCurrency) ||
+		errors.Is(err, domain.ErrCurrencyMismatch) ||
+		errors.Is(err, domain.ErrMoneyOverflow) ||
+		errors.Is(err, domain.ErrInvalidTimestamp) ||
 		errors.Is(err, domain.ErrNonPositiveAmount) ||
 		errors.Is(err, domain.ErrLossAmountMustBeZero) ||
 		errors.Is(err, domain.ErrReferenceExternalTransactionIDRequired) ||

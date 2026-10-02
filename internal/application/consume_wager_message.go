@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
@@ -79,7 +80,8 @@ func (useCase *ConsumeWagerMessageUseCase) Execute(
 	nextAttemptAt time.Time,
 ) (ConsumeWagerMessageResult, error) {
 	envelope, err := decodeWagerMessage(body)
-	if err != nil || workerID == "" || now.IsZero() || !leaseExpiresAt.After(now) {
+	if err != nil || strings.TrimSpace(workerID) == "" || now.IsZero() ||
+		!leaseExpiresAt.After(now) || !nextAttemptAt.After(now) {
 		return ConsumeWagerMessageResult{}, ErrInvalidWagerMessage
 	}
 	payloadHash := sha256.Sum256(body)
@@ -144,8 +146,9 @@ func decodeWagerMessage(body []byte) (WagerTransactionRequestedEnvelope, error) 
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return envelope, ErrInvalidWagerMessage
 	}
-	if envelope.MessageID == "" || envelope.Type != "WagerTransactionRequested" ||
-		envelope.OccurredAt.IsZero() || envelope.Data.IdempotencyKey == "" {
+	if strings.TrimSpace(envelope.MessageID) == "" ||
+		envelope.Type != "WagerTransactionRequested" ||
+		envelope.OccurredAt.IsZero() || strings.TrimSpace(envelope.Data.IdempotencyKey) == "" {
 		return envelope, ErrInvalidWagerMessage
 	}
 	return envelope, nil

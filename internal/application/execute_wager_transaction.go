@@ -174,10 +174,12 @@ func (useCase *ExecuteWagerTransactionUseCase) Execute(
 
 	processed, err := useCase.process(ctx, command, submitted.TransactionID)
 	if err != nil {
-		if submitted.IdempotentReplay && errors.Is(err, domain.ErrInvalidWagerTransactionTransition) {
+		if errors.Is(err, domain.ErrInvalidWagerTransactionTransition) {
 			reloaded, reloadErr := useCase.submitter.Execute(ctx, submitCommand)
-			if reloadErr == nil {
-				return executeResultFromSubmission(reloaded), nil
+			if reloadErr == nil && reloaded.Status != domain.WagerTransactionStatusPending {
+				result := executeResultFromSubmission(reloaded)
+				result.IdempotentReplay = submitted.IdempotentReplay
+				return result, nil
 			}
 		}
 		return ExecuteWagerTransactionResult{}, err

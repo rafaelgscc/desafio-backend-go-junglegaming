@@ -16,3 +16,7 @@ ATTRIBUTES="$(printf '{"FifoQueue":"true","ContentBasedDeduplication":"false","V
 awslocal sqs create-queue \
   --queue-name wager-transactions.fifo \
   --attributes "$ATTRIBUTES"
+
+awslocal sqs create-queue \
+  --queue-name integration-events.fifo \
+  --attributes '{"FifoQueue":"true","ContentBasedDeduplication":"false"}'

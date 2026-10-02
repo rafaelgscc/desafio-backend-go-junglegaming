@@ -1,4 +1,4 @@
-package sqsadapter
+package outboxworker
 
 import (
 	"go.uber.org/fx"
@@ -7,11 +7,11 @@ import (
 )
 
 var Module = fx.Module(
-	"sqs",
-	fx.Provide(config.LoadSQSConfig, NewTransport, NewEventPublisher, NewWorker),
-	fx.Invoke(registerWorkerLifecycle),
+	"outbox-worker",
+	fx.Provide(config.LoadOutboxConfig, NewWorker),
+	fx.Invoke(registerLifecycle),
 )
 
-func registerWorkerLifecycle(lifecycle fx.Lifecycle, worker *Worker) {
+func registerLifecycle(lifecycle fx.Lifecycle, worker *Worker) {
 	lifecycle.Append(fx.Hook{OnStart: worker.Start, OnStop: worker.Stop})
 }
