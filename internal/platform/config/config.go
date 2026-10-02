@@ -22,6 +22,7 @@ var (
 	)
 	ErrOIDCIssuerURLRequired = errors.New("OIDC_ISSUER_URL is required")
 	ErrOIDCAudienceRequired  = errors.New("OIDC_AUDIENCE is required")
+	ErrSQSQueueNameRequired  = errors.New("SQS_QUEUE_NAME is required")
 )
 
 type PostgresConfig struct {
@@ -43,6 +44,41 @@ type HTTPConfig struct {
 type OIDCConfig struct {
 	IssuerURL string
 	Audience  string
+}
+
+type SQSConfig struct {
+	Region            string
+	Endpoint          string
+	QueueName         string
+	ConsumerName      string
+	WorkerID          string
+	WaitTime          time.Duration
+	VisibilityTimeout time.Duration
+	MaxMessages       int32
+}
+
+func LoadSQSConfig() (SQSConfig, error) {
+	region := strings.TrimSpace(os.Getenv("AWS_REGION"))
+	if region == "" {
+		region = "us-east-1"
+	}
+	queueName := strings.TrimSpace(os.Getenv("SQS_QUEUE_NAME"))
+	if queueName == "" {
+		queueName = "wager-transactions.fifo"
+	}
+	if !strings.HasSuffix(queueName, ".fifo") {
+		return SQSConfig{}, ErrSQSQueueNameRequired
+	}
+	workerID := strings.TrimSpace(os.Getenv("SQS_WORKER_ID"))
+	if workerID == "" {
+		hostname, _ := os.Hostname()
+		workerID = fmt.Sprintf("%s-%d", hostname, os.Getpid())
+	}
+	return SQSConfig{
+		Region: region, Endpoint: strings.TrimSpace(os.Getenv("SQS_ENDPOINT")),
+		QueueName: queueName, ConsumerName: "wager-transactions", WorkerID: workerID,
+		WaitTime: 10 * time.Second, VisibilityTimeout: 30 * time.Second, MaxMessages: 10,
+	}, nil
 }
 
 func LoadOIDCConfig() (OIDCConfig, error) {

@@ -11,11 +11,13 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/config"
 	httpadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/http"
 	platformpostgres "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/postgres"
+	sqsadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/sqs"
 )
 
 var Module = fx.Module(
 	"bootstrap",
 	httpadapter.Module,
+	sqsadapter.Module,
 	fx.Provide(
 		config.LoadPostgresConfig,
 		providePostgresPool,
@@ -29,6 +31,10 @@ var Module = fx.Module(
 			fx.As(new(application.WageringQueryRepository)),
 		),
 		application.NewWageringQueryService,
+		fx.Annotate(
+			platformpostgres.NewInboxRepository,
+			fx.As(new(application.InboxRepository)),
+		),
 		application.NewOpenWalletUseCase,
 		application.NewSubmitWagerTransactionUseCase,
 		application.NewProcessBetUseCase,
@@ -43,8 +49,16 @@ var Module = fx.Module(
 			fx.ResultTags(`name:"process_rollback"`),
 		),
 		provideExecuteWagerTransactionUseCase,
+		provideWagerMessageExecutor,
+		application.NewConsumeWagerMessageUseCase,
 	),
 )
+
+func provideWagerMessageExecutor(
+	useCase *application.ExecuteWagerTransactionUseCase,
+) application.WagerMessageExecutor {
+	return useCase
+}
 
 type executeWagerTransactionDependencies struct {
 	fx.In
@@ -72,8 +86,21 @@ func provideExecuteWagerTransactionUseCase(
 
 func provideDatabaseHealthChecker(
 	pool *pgxpool.Pool,
+	transport *sqsadapter.Transport,
 ) httpadapter.DatabaseHealthChecker {
-	return pool
+	return serviceHealthChecker{database: pool, sqs: transport}
+}
+
+type serviceHealthChecker struct {
+	database *pgxpool.Pool
+	sqs      *sqsadapter.Transport
+}
+
+func (checker serviceHealthChecker) Ping(ctx context.Context) error {
+	if err := checker.database.Ping(ctx); err != nil {
+		return err
+	}
+	return checker.sqs.Ping(ctx)
 }
 
 func providePostgresPool(

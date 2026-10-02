@@ -8,11 +8,12 @@ import (
 )
 
 type ProcessLossCommand struct {
-	TransactionID  string
-	OutcomeEventID string
-	CorrelationID  string
-	CausationID    string
-	ProcessedAt    time.Time
+	TransactionID   string
+	OutcomeEventID  string
+	CorrelationID   string
+	CausationID     string
+	ProcessedAt     time.Time
+	InboxCompletion *InboxCompletion
 }
 
 type ProcessLossResult = ProcessWagerResult
@@ -72,6 +73,9 @@ func (useCase *ProcessLossUseCase) Execute(
 			Status:        transaction.Status(),
 			Balance:       wallet.Balance(),
 			WalletVersion: wallet.Version(),
+		}
+		if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+			return err
 		}
 		return nil
 	})

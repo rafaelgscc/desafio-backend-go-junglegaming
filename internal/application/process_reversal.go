@@ -23,6 +23,7 @@ type ProcessReversalCommand struct {
 	CausationID            string
 	ProcessedAt            time.Time
 	NextReferenceAttemptAt time.Time
+	InboxCompletion        *InboxCompletion
 }
 
 type ProcessReversalResult = ProcessWagerResult
@@ -193,6 +194,9 @@ func persistPendingReference(
 		Status: transaction.Status(), Balance: wallet.Balance(), WalletVersion: wallet.Version(),
 		FailureCode: transaction.FailureCode(),
 	}
+	if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -220,6 +224,9 @@ func persistRejectedReversal(
 	*result = ProcessReversalResult{
 		Status: transaction.Status(), Balance: wallet.Balance(), WalletVersion: wallet.Version(),
 		FailureCode: transaction.FailureCode(),
+	}
+	if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+		return err
 	}
 	return nil
 }
@@ -287,6 +294,9 @@ func applyReversal(
 	*result = ProcessReversalResult{
 		Status: transaction.Status(), Balance: wallet.Balance(), WalletVersion: wallet.Version(),
 		FailureCode: transaction.FailureCode(),
+	}
+	if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+		return err
 	}
 	return nil
 }

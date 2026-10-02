@@ -348,6 +348,13 @@ type fakeWageringTransaction struct {
 	insertedWallet        bool
 }
 
+func (tx *fakeWageringTransaction) CompleteInbox(
+	_ context.Context,
+	_ InboxCompletion,
+) error {
+	return nil
+}
+
 func (tx *fakeWageringTransaction) FindWagerTransactionForUpdate(
 	_ context.Context,
 	_ string,

@@ -64,7 +64,11 @@ func TestWagerTransactionHTTPPersistsBetAndReplaysOriginalResult(t *testing.T) {
 	if _, err := pool.Exec(ctx, `
 		INSERT INTO wallets (
 			id, player_id, currency, balance_in_cents, version, created_at, updated_at
-		) VALUES ('wallet-1', 'player-1', 'BRL', 10000, 1, NOW(), NOW())
+		) VALUES (
+			'wallet-1', 'player-1', 'BRL', 10000, 1,
+			'2026-10-01T19:00:00Z'::timestamptz,
+			'2026-10-01T19:00:00Z'::timestamptz
+		)
 	`); err != nil {
 		t.Fatalf("insert wallet fixture: %v", err)
 	}

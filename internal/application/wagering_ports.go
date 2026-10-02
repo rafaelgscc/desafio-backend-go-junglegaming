@@ -49,6 +49,7 @@ type WageringTransaction interface {
 	SaveWallet(ctx context.Context, wallet domain.Wallet) error
 	AppendWalletLedgerEntry(ctx context.Context, entry domain.WalletLedgerEntry) error
 	AppendOutboxEvent(ctx context.Context, event IntegrationEvent) error
+	CompleteInbox(ctx context.Context, completion InboxCompletion) error
 }
 
 // WageringUnitOfWork provides the atomic boundary used by wagering use cases.

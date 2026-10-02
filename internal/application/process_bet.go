@@ -25,6 +25,7 @@ type ProcessBetCommand struct {
 	CorrelationID         string
 	CausationID           string
 	ProcessedAt           time.Time
+	InboxCompletion       *InboxCompletion
 }
 
 type ProcessWagerResult struct {
@@ -103,6 +104,9 @@ func (useCase *ProcessBetUseCase) Execute(
 				WalletVersion: wallet.Version(),
 				FailureCode:   transaction.FailureCode(),
 			}
+			if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+				return err
+			}
 			return nil
 		}
 
@@ -158,6 +162,9 @@ func (useCase *ProcessBetUseCase) Execute(
 			Balance:       wallet.Balance(),
 			WalletVersion: wallet.Version(),
 		}
+		if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -165,6 +172,17 @@ func (useCase *ProcessBetUseCase) Execute(
 	}
 
 	return result, nil
+}
+
+func completeInboxIfRequested(
+	ctx context.Context,
+	tx WageringTransaction,
+	completion *InboxCompletion,
+) error {
+	if completion == nil {
+		return nil
+	}
+	return tx.CompleteInbox(ctx, *completion)
 }
 
 func newWagerTransactionProcessedEvent(

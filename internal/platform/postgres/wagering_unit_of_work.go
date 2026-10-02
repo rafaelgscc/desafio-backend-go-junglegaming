@@ -64,6 +64,7 @@ func (unitOfWork *PostgresWageringUnitOfWork) WithinTransaction(
 }
 
 type postgresWageringTransaction struct {
+	tx pgx.Tx
 	*WalletRepository
 	*WagerTransactionRepository
 	*WalletLedgerEntryRepository
@@ -94,9 +95,30 @@ func newPostgresWageringTransaction(
 	}
 
 	return &postgresWageringTransaction{
+		tx:                          tx,
 		WalletRepository:            walletRepository,
 		WagerTransactionRepository:  wagerTransactionRepository,
 		WalletLedgerEntryRepository: walletLedgerEntryRepository,
 		OutboxRepository:            outboxRepository,
 	}, nil
+}
+
+func (transaction *postgresWageringTransaction) CompleteInbox(
+	ctx context.Context,
+	completion application.InboxCompletion,
+) error {
+	tag, err := transaction.tx.Exec(ctx, `
+		UPDATE inbox_events
+		SET processed_at = $1, lease_owner = NULL, lease_expires_at = NULL, last_error = NULL
+		WHERE consumer_name = $2 AND message_id = $3
+			AND lease_owner = $4 AND processed_at IS NULL
+	`, completion.ProcessedAt.UTC(), completion.ConsumerName,
+		completion.MessageID, completion.LeaseOwner)
+	if err != nil {
+		return fmt.Errorf("complete inbox in wagering transaction: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return application.ErrInboxLeaseLost
+	}
+	return nil
 }

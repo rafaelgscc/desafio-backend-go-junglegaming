@@ -72,6 +72,7 @@ type ExecuteWagerTransactionCommand struct {
 	CausationID            string
 	OccurredAt             time.Time
 	NextReferenceAttemptAt time.Time
+	InboxCompletion        *InboxCompletion
 }
 
 type ExecuteWagerTransactionResult struct {
@@ -204,7 +205,8 @@ func (useCase *ExecuteWagerTransactionUseCase) process(
 			OutcomeEventID:        command.OutcomeEventID,
 			BalanceChangedEventID: command.BalanceChangedEventID,
 			CorrelationID:         command.CorrelationID, CausationID: command.CausationID,
-			ProcessedAt: command.OccurredAt,
+			ProcessedAt:     command.OccurredAt,
+			InboxCompletion: command.InboxCompletion,
 		})
 	case domain.WagerTransactionKindWin:
 		return useCase.win.Execute(ctx, ProcessWinCommand{
@@ -212,13 +214,15 @@ func (useCase *ExecuteWagerTransactionUseCase) process(
 			OutcomeEventID:        command.OutcomeEventID,
 			BalanceChangedEventID: command.BalanceChangedEventID,
 			CorrelationID:         command.CorrelationID, CausationID: command.CausationID,
-			ProcessedAt: command.OccurredAt,
+			ProcessedAt:     command.OccurredAt,
+			InboxCompletion: command.InboxCompletion,
 		})
 	case domain.WagerTransactionKindLoss:
 		return useCase.loss.Execute(ctx, ProcessLossCommand{
 			TransactionID: transactionID, OutcomeEventID: command.OutcomeEventID,
 			CorrelationID: command.CorrelationID, CausationID: command.CausationID,
-			ProcessedAt: command.OccurredAt,
+			ProcessedAt:     command.OccurredAt,
+			InboxCompletion: command.InboxCompletion,
 		})
 	case domain.WagerTransactionKindRefund, domain.WagerTransactionKindRollback:
 		processor := useCase.refund
@@ -232,6 +236,7 @@ func (useCase *ExecuteWagerTransactionUseCase) process(
 			CorrelationID:         command.CorrelationID, CausationID: command.CausationID,
 			ProcessedAt:            command.OccurredAt,
 			NextReferenceAttemptAt: command.NextReferenceAttemptAt,
+			InboxCompletion:        command.InboxCompletion,
 		})
 	default:
 		return ProcessWagerResult{}, ErrInvalidExecuteWagerTransactionCommand

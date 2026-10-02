@@ -109,3 +109,27 @@ func TestLoadOIDCConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestLoadSQSConfig(t *testing.T) {
+	t.Run("loads local SQS settings", func(t *testing.T) {
+		t.Setenv("AWS_REGION", "us-east-1")
+		t.Setenv("SQS_ENDPOINT", "http://localhost:4566")
+		t.Setenv("SQS_QUEUE_NAME", "wager-transactions.fifo")
+		t.Setenv("SQS_WORKER_ID", "worker-1")
+		config, err := LoadSQSConfig()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.Region != "us-east-1" || config.Endpoint != "http://localhost:4566" ||
+			config.QueueName != "wager-transactions.fifo" || config.WorkerID != "worker-1" {
+			t.Fatalf("SQS config = %#v", config)
+		}
+	})
+
+	t.Run("requires a FIFO queue", func(t *testing.T) {
+		t.Setenv("SQS_QUEUE_NAME", "wager-transactions")
+		if _, err := LoadSQSConfig(); !errors.Is(err, ErrSQSQueueNameRequired) {
+			t.Fatalf("LoadSQSConfig() error = %v", err)
+		}
+	})
+}

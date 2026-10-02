@@ -16,6 +16,7 @@ type ProcessWinCommand struct {
 	CorrelationID         string
 	CausationID           string
 	ProcessedAt           time.Time
+	InboxCompletion       *InboxCompletion
 }
 
 type ProcessWinResult = ProcessWagerResult
@@ -147,6 +148,9 @@ func (useCase *ProcessWinUseCase) Execute(
 			Balance:       wallet.Balance(),
 			WalletVersion: wallet.Version(),
 		}
+		if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -185,6 +189,9 @@ func rejectWin(
 		Balance:       wallet.Balance(),
 		WalletVersion: wallet.Version(),
 		FailureCode:   transaction.FailureCode(),
+	}
+	if err := completeInboxIfRequested(ctx, tx, command.InboxCompletion); err != nil {
+		return err
 	}
 	return nil
 }
