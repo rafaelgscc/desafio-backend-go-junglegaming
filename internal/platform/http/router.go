@@ -3,6 +3,7 @@ package httpadapter
 import "net/http"
 
 import platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
+import "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 
 func NewRouter(
 	openWalletHandler *OpenWalletHandler,
@@ -10,11 +11,13 @@ func NewRouter(
 	wagerTransactionHandler *WagerTransactionHandler,
 	wageringQueryHandler *WageringQueryHandler,
 	authMiddleware *platformauth.Middleware,
+	metrics *observability.Metrics,
 ) http.Handler {
 	router := http.NewServeMux()
 	router.Handle("POST /wallets", authMiddleware.RequireInternal(openWalletHandler))
 	router.HandleFunc("GET /health/live", healthHandler.Live)
 	router.HandleFunc("GET /health/ready", healthHandler.Ready)
+	router.Handle("GET /metrics", metrics)
 	router.Handle(
 		"POST /wagering/transactions",
 		authMiddleware.RequireProvider(wagerTransactionHandler),

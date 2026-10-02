@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
 	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 )
 
 var ErrWageringQueryExecutorRequired = errors.New("wagering query executor is required")
@@ -27,13 +29,20 @@ type WageringQueryExecutor interface {
 
 type WageringQueryHandler struct {
 	executor WageringQueryExecutor
+	metrics  *observability.Metrics
 }
 
-func NewWageringQueryHandler(executor WageringQueryExecutor) (*WageringQueryHandler, error) {
+func NewWageringQueryHandler(
+	executor WageringQueryExecutor,
+	metrics *observability.Metrics,
+) (*WageringQueryHandler, error) {
 	if executor == nil {
 		return nil, ErrWageringQueryExecutorRequired
 	}
-	return &WageringQueryHandler{executor: executor}, nil
+	if metrics == nil {
+		return nil, observability.ErrMetricsRequired
+	}
+	return &WageringQueryHandler{executor: executor, metrics: metrics}, nil
 }
 
 type walletDetailsResponse struct {
@@ -198,6 +207,12 @@ func (handler *WageringQueryHandler) ReconcileWallet(response http.ResponseWrite
 	if err != nil {
 		handler.writeQueryError(response, err)
 		return
+	}
+	handler.metrics.RecordReconciliation(result.Consistent)
+	if !result.Consistent {
+		slog.Warn("wallet reconciliation divergence",
+			"walletId", observability.SafeLogValue(result.WalletID),
+			"checkedEntries", result.CheckedEntries)
 	}
 	writeJSON(response, http.StatusOK, reconciliationResponse(result))
 }

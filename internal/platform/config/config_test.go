@@ -124,7 +124,8 @@ func TestLoadSQSConfig(t *testing.T) {
 		}
 		if config.Region != "us-east-1" || config.Endpoint != "http://localhost:4566" ||
 			config.QueueName != "wager-transactions.fifo" ||
-			config.EventQueueName != "integration-events.fifo" || config.WorkerID != "worker-1" {
+			config.EventQueueName != "integration-events.fifo" || config.WorkerID != "worker-1" ||
+			config.MaxReceiveCount != 5 {
 			t.Fatalf("SQS config = %#v", config)
 		}
 	})

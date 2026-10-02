@@ -33,6 +33,7 @@ Os endpoints `/health/live` e `/health/ready` são públicos.
 | `GET /providers/{providerId}/wagering/transactions/{externalTransactionId}` | provedor proprietário | `200 OK` |
 | `GET /health/live` | pública | `200 OK` |
 | `GET /health/ready` | pública | `200 OK` ou `503 Service Unavailable` |
+| `GET /metrics` | pública | `200 OK` |
 
 O ledger aceita `limit` entre 1 e 100, com padrão 50, e `cursor` opaco. A ordenação
 é estável por `(createdAt, id)`. A resposta omite `nextCursor` quando não existe outra

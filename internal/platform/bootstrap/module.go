@@ -10,6 +10,7 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/config"
 	httpadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/http"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 	outboxworker "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/outbox"
 	platformpostgres "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/postgres"
 	referenceworker "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/referenceworker"
@@ -18,6 +19,7 @@ import (
 
 var Module = fx.Module(
 	"bootstrap",
+	observability.Module,
 	httpadapter.Module,
 	sqsadapter.Module,
 	outboxworker.Module,

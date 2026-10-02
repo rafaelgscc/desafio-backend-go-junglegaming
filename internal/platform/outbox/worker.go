@@ -8,11 +8,13 @@ import (
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/config"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 )
 
 type Worker struct {
 	useCase *application.PublishOutboxBatchUseCase
 	config  config.OutboxConfig
+	metrics *observability.Metrics
 
 	mu            sync.Mutex
 	stop          chan struct{}
@@ -23,11 +25,15 @@ type Worker struct {
 func NewWorker(
 	useCase *application.PublishOutboxBatchUseCase,
 	outboxConfig config.OutboxConfig,
+	metrics *observability.Metrics,
 ) (*Worker, error) {
 	if useCase == nil {
 		return nil, application.ErrOutboxDeliveryRepositoryRequired
 	}
-	return &Worker{useCase: useCase, config: outboxConfig}, nil
+	if metrics == nil {
+		return nil, observability.ErrMetricsRequired
+	}
+	return &Worker{useCase: useCase, config: outboxConfig, metrics: metrics}, nil
 }
 
 func (worker *Worker) Start(context.Context) error {
@@ -81,6 +87,7 @@ func (worker *Worker) run(ctx context.Context) {
 		if err != nil && ctx.Err() == nil {
 			slog.Error("outbox batch failed", "workerId", worker.config.WorkerID, "error", err)
 		} else if result.Failed > 0 {
+			worker.metrics.RecordRetries("outbox", result.Failed)
 			slog.Warn(
 				"outbox events scheduled for retry", "workerId", worker.config.WorkerID,
 				"claimed", result.Claimed, "published", result.Published, "failed", result.Failed,

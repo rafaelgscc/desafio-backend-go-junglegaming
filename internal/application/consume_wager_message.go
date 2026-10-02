@@ -51,6 +51,7 @@ type ConsumeWagerMessageResult struct {
 	MessageID        string
 	DeleteFromQueue  bool
 	AlreadyProcessed bool
+	Status           domain.WagerTransactionStatus
 }
 
 type ConsumeWagerMessageUseCase struct {
@@ -117,7 +118,8 @@ func (useCase *ConsumeWagerMessageUseCase) Execute(
 		LeaseOwner:   workerID,
 		ProcessedAt:  now.UTC(),
 	}
-	if _, err := useCase.executor.Execute(ctx, command); err != nil {
+	execution, err := useCase.executor.Execute(ctx, command)
+	if err != nil {
 		failErr := useCase.inbox.Fail(
 			ctx, WagerTransactionsConsumerName, envelope.MessageID,
 			workerID, nextAttemptAt.UTC(), err.Error(),
@@ -133,7 +135,9 @@ func (useCase *ConsumeWagerMessageUseCase) Execute(
 	); err != nil {
 		return ConsumeWagerMessageResult{MessageID: envelope.MessageID}, err
 	}
-	return ConsumeWagerMessageResult{MessageID: envelope.MessageID, DeleteFromQueue: true}, nil
+	return ConsumeWagerMessageResult{
+		MessageID: envelope.MessageID, DeleteFromQueue: true, Status: execution.Status,
+	}, nil
 }
 
 func decodeWagerMessage(body []byte) (WagerTransactionRequestedEnvelope, error) {

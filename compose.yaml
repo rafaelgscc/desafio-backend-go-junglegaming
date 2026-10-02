@@ -49,8 +49,6 @@ services:
 
   migrate:
     image: migrate/migrate:v4.20.1
-    profiles:
-      - tools
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +60,37 @@ services:
       - -database=postgres://jungle:jungle@postgres:5432/jungle_wallet?sslmode=disable
     command:
       - up
+
+  app:
+    build:
+      context: .
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://jungle:jungle@postgres:5432/jungle_wallet?sslmode=disable
+      DATABASE_MAX_CONNECTIONS: 10
+      DATABASE_MIN_CONNECTIONS: 2
+      HTTP_ADDRESS: :8080
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_ENDPOINT: http://localstack:4566
+      SQS_QUEUE_NAME: wager-transactions.fifo
+      SQS_EVENT_QUEUE_NAME: integration-events.fifo
+      OIDC_ISSUER_URL: http://host.docker.internal:8081/realms/jungle
+      OIDC_AUDIENCE: jungle-api
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:

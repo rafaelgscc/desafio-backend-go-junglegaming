@@ -16,6 +16,7 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
 	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
 	httpadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/http"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 	platformpostgres "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/postgres"
 )
 
@@ -56,6 +57,7 @@ func TestWagerTransactionHTTPPersistsBetAndReplaysOriginalResult(t *testing.T) {
 		"000006_add_outbox_delivery_control.up.sql",
 		"000007_create_inbox_events.up.sql",
 		"000008_allow_optional_win_reference.up.sql",
+		"000009_harden_inbox_events.up.sql",
 	} {
 		if _, err := pool.Exec(ctx, readMigrationFile(t, migration)); err != nil {
 			t.Fatalf("apply migration %s: %v", migration, err)
@@ -93,6 +95,7 @@ func TestWagerTransactionHTTPPersistsBetAndReplaysOriginalResult(t *testing.T) {
 		execute,
 		&integrationSequenceIDGenerator{},
 		integrationFixedClock{now: time.Date(2026, time.October, 1, 20, 0, 0, 0, time.UTC)},
+		observability.NewMetrics(),
 	)
 	if err != nil {
 		t.Fatalf("NewWagerTransactionHandler() unexpected error: %v", err)
@@ -121,6 +124,26 @@ func TestWagerTransactionHTTPPersistsBetAndReplaysOriginalResult(t *testing.T) {
 	if replayResult.TransactionID != firstResult.TransactionID ||
 		replayResult.Balance.Amount() != "75.00" || !replayResult.IdempotentReplay {
 		t.Fatalf("replay result = %#v, want original transaction and balance", replayResult)
+	}
+
+	inbox, _ := platformpostgres.NewInboxRepository(pool)
+	consumer, _ := application.NewConsumeWagerMessageUseCase(inbox, execute)
+	messageBody := []byte(`{
+		"messageId":"message-cross-channel-1","type":"WagerTransactionRequested",
+		"occurredAt":"2026-10-01T20:01:00Z",
+		"data":{"providerId":"provider-a","externalTransactionId":"external-bet-1",
+		"idempotencyKey":"provider-a:external-bet-1","playerId":"player-1",
+		"walletId":"wallet-1","roundId":"round-1","gameId":"game-1","kind":"BET",
+		"money":{"amount":"25.00","currency":"BRL"}}
+	}`)
+	messageResult, err := consumer.Execute(
+		ctx, messageBody, "sqs-worker-1",
+		time.Date(2026, time.October, 1, 20, 1, 0, 0, time.UTC),
+		time.Date(2026, time.October, 1, 20, 1, 30, 0, time.UTC),
+		time.Date(2026, time.October, 1, 20, 1, 1, 0, time.UTC),
+	)
+	if err != nil || !messageResult.DeleteFromQueue {
+		t.Fatalf("cross-channel replay result = %#v, error = %v", messageResult, err)
 	}
 
 	conflictingBody := bytes.ReplaceAll([]byte(requestBody), []byte(`"25.00"`), []byte(`"20.00"`))

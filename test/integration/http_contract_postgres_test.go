@@ -15,6 +15,7 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
 	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
 	httpadapter "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/http"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 	platformpostgres "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/postgres"
 )
 
@@ -43,11 +44,12 @@ func TestHTTPContractWithPostgresAndProviderIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wagerHandler, err := httpadapter.NewWagerTransactionHandler(wagerExecutor, idGenerator, clock)
+	metrics := observability.NewMetrics()
+	wagerHandler, err := httpadapter.NewWagerTransactionHandler(wagerExecutor, idGenerator, clock, metrics)
 	if err != nil {
 		t.Fatal(err)
 	}
-	queryHandler, err := httpadapter.NewWageringQueryHandler(queryService)
+	queryHandler, err := httpadapter.NewWageringQueryHandler(queryService, metrics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +63,7 @@ func TestHTTPContractWithPostgresAndProviderIsolation(t *testing.T) {
 	}
 	router := httpadapter.NewRouter(
 		openWalletHandler, healthHandler, wagerHandler, queryHandler, authMiddleware,
+		metrics,
 	)
 
 	for _, path := range []string{"/health/live", "/health/ready"} {

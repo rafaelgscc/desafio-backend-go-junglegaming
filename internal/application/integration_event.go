@@ -18,49 +18,49 @@ const (
 const IntegrationEventVersion = 1
 
 type IntegrationEvent struct {
-	EventID       string               `json:"event_id"`
-	EventType     IntegrationEventType `json:"event_type"`
-	AggregateID   string               `json:"aggregate_id"`
-	CorrelationID string               `json:"correlation_id"`
-	CausationID   string               `json:"causation_id,omitempty"`
-	OccurredAt    time.Time            `json:"occurred_at"`
+	EventID       string               `json:"eventId"`
+	EventType     IntegrationEventType `json:"eventType"`
+	AggregateID   string               `json:"aggregateId"`
+	CorrelationID string               `json:"correlationId"`
+	CausationID   string               `json:"causationId,omitempty"`
+	OccurredAt    time.Time            `json:"occurredAt"`
 	Version       int                  `json:"version"`
 	Data          any                  `json:"data"`
 }
 
 type WagerTransactionProcessedData struct {
-	TransactionID         string                      `json:"transaction_id"`
-	ProviderID            string                      `json:"provider_id"`
-	ExternalTransactionID string                      `json:"external_transaction_id"`
+	TransactionID         string                      `json:"transactionId"`
+	ProviderID            string                      `json:"providerId"`
+	ExternalTransactionID string                      `json:"externalTransactionId"`
 	Kind                  domain.WagerTransactionKind `json:"kind"`
 	Money                 domain.Money                `json:"money"`
 	Balance               domain.Money                `json:"balance"`
 }
 
 type WagerTransactionRejectedData struct {
-	TransactionID         string                             `json:"transaction_id"`
-	ProviderID            string                             `json:"provider_id"`
-	ExternalTransactionID string                             `json:"external_transaction_id"`
+	TransactionID         string                             `json:"transactionId"`
+	ProviderID            string                             `json:"providerId"`
+	ExternalTransactionID string                             `json:"externalTransactionId"`
 	Kind                  domain.WagerTransactionKind        `json:"kind"`
 	Money                 domain.Money                       `json:"money"`
-	FailureCode           domain.WagerTransactionFailureCode `json:"failure_code"`
+	FailureCode           domain.WagerTransactionFailureCode `json:"failureCode"`
 }
 
 type WalletBalanceChangedData struct {
-	WalletID      string                 `json:"wallet_id"`
-	TransactionID string                 `json:"transaction_id"`
+	WalletID      string                 `json:"walletId"`
+	TransactionID string                 `json:"transactionId"`
 	Direction     domain.LedgerDirection `json:"direction"`
 	Money         domain.Money           `json:"money"`
-	BalanceBefore domain.Money           `json:"balance_before"`
-	BalanceAfter  domain.Money           `json:"balance_after"`
-	WalletVersion int64                  `json:"wallet_version"`
+	BalanceBefore domain.Money           `json:"balanceBefore"`
+	BalanceAfter  domain.Money           `json:"balanceAfter"`
+	WalletVersion int64                  `json:"walletVersion"`
 }
 
 type WagerTransactionPendingReferenceData struct {
-	TransactionID                  string    `json:"transaction_id"`
-	ProviderID                     string    `json:"provider_id"`
-	ExternalTransactionID          string    `json:"external_transaction_id"`
-	ReferenceExternalTransactionID string    `json:"reference_external_transaction_id"`
-	ReferenceAttempts              int       `json:"reference_attempts"`
-	NextReferenceAttemptAt         time.Time `json:"next_reference_attempt_at"`
+	TransactionID                  string    `json:"transactionId"`
+	ProviderID                     string    `json:"providerId"`
+	ExternalTransactionID          string    `json:"externalTransactionId"`
+	ReferenceExternalTransactionID string    `json:"referenceExternalTransactionId"`
+	ReferenceAttempts              int       `json:"referenceAttempts"`
+	NextReferenceAttemptAt         time.Time `json:"nextReferenceAttemptAt"`
 }

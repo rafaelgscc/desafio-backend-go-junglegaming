@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/config"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 )
 
 type WagerMessageConsumer interface {
@@ -23,6 +24,7 @@ type Worker struct {
 	transport     *Transport
 	consumer      WagerMessageConsumer
 	config        config.SQSConfig
+	metrics       *observability.Metrics
 	pollCancel    context.CancelFunc
 	processCancel context.CancelFunc
 	done          chan struct{}
@@ -33,6 +35,7 @@ func NewWorker(
 	transport *Transport,
 	consumer *application.ConsumeWagerMessageUseCase,
 	sqsConfig config.SQSConfig,
+	metrics *observability.Metrics,
 ) (*Worker, error) {
 	if transport == nil {
 		return nil, ErrTransportRequired
@@ -40,7 +43,10 @@ func NewWorker(
 	if consumer == nil {
 		return nil, application.ErrWagerMessageExecutorRequired
 	}
-	return &Worker{transport: transport, consumer: consumer, config: sqsConfig}, nil
+	if metrics == nil {
+		return nil, observability.ErrMetricsRequired
+	}
+	return &Worker{transport: transport, consumer: consumer, config: sqsConfig, metrics: metrics}, nil
 }
 
 func (worker *Worker) Start(context.Context) error {
@@ -133,10 +139,20 @@ func (worker *Worker) processMessage(ctx context.Context, message types.Message)
 		receiveCount = 1
 	}
 	retryDelay := retryBackoff(receiveCount)
+	startedAt := time.Now()
 	result, err := worker.consumer.Execute(
 		ctx, []byte(aws.ToString(message.Body)), worker.config.WorkerID, now,
 		now.Add(worker.config.VisibilityTimeout), now.Add(retryDelay),
 	)
+	if worker.metrics != nil {
+		worker.metrics.ObserveProcessing("sqs", time.Since(startedAt))
+		if result.Status != "" {
+			worker.metrics.RecordWagerResult(string(result.Status))
+		}
+		if result.AlreadyProcessed {
+			worker.metrics.RecordDuplicate("sqs")
+		}
+	}
 	if err == nil && result.DeleteFromQueue {
 		_, deleteErr := worker.transport.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
 			QueueUrl: worker.transportQueueURL(), ReceiptHandle: message.ReceiptHandle,
@@ -146,7 +162,21 @@ func (worker *Worker) processMessage(ctx context.Context, message types.Message)
 		} else if deleteErr != nil {
 			worker.releaseMessage(message)
 		}
+		if deleteErr == nil {
+			slog.Info("sqs wager message processed", "messageId", result.MessageID,
+				"status", result.Status, "idempotentReplay", result.AlreadyProcessed)
+		}
 		return
+	}
+	if worker.metrics != nil {
+		worker.metrics.RecordRetries("sqs", 1)
+		maxReceiveCount := worker.config.MaxReceiveCount
+		if maxReceiveCount < 1 {
+			maxReceiveCount = 5
+		}
+		if receiveCount >= maxReceiveCount {
+			worker.metrics.RecordDLQ()
+		}
 	}
 	if errors.Is(err, application.ErrInboxMessageBusy) {
 		retryDelay = time.Second
@@ -169,6 +199,10 @@ func (worker *Worker) processMessage(ctx context.Context, message types.Message)
 	)
 	if visibilityErr != nil {
 		slog.Error("sqs visibility change failed", "messageId", result.MessageID, "error", visibilityErr)
+	}
+	if err != nil && ctx.Err() == nil {
+		slog.Warn("sqs wager message scheduled for retry", "messageId", result.MessageID,
+			"receiveCount", receiveCount, "retryDelaySeconds", int(retryDelay/time.Second), "error", err)
 	}
 }
 

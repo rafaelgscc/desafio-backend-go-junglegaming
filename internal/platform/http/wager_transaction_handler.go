@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/domain"
 	platformauth "github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/auth"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 )
 
 const referenceRetryDelay = time.Minute
@@ -27,12 +29,14 @@ type WagerTransactionHandler struct {
 	executor    ExecuteWagerTransactionExecutor
 	idGenerator IDGenerator
 	clock       Clock
+	metrics     *observability.Metrics
 }
 
 func NewWagerTransactionHandler(
 	executor ExecuteWagerTransactionExecutor,
 	idGenerator IDGenerator,
 	clock Clock,
+	metrics *observability.Metrics,
 ) (*WagerTransactionHandler, error) {
 	if executor == nil {
 		return nil, ErrExecuteWagerTransactionExecutorRequired
@@ -43,8 +47,11 @@ func NewWagerTransactionHandler(
 	if clock == nil {
 		return nil, ErrClockRequired
 	}
+	if metrics == nil {
+		return nil, observability.ErrMetricsRequired
+	}
 	return &WagerTransactionHandler{
-		executor: executor, idGenerator: idGenerator, clock: clock,
+		executor: executor, idGenerator: idGenerator, clock: clock, metrics: metrics,
 	}, nil
 }
 
@@ -133,6 +140,7 @@ func (handler *WagerTransactionHandler) ServeHTTP(
 		}
 	}
 	now := handler.clock.Now().UTC()
+	startedAt := time.Now()
 	result, err := handler.executor.Execute(
 		request.Context(),
 		application.ExecuteWagerTransactionCommand{
@@ -150,10 +158,28 @@ func (handler *WagerTransactionHandler) ServeHTTP(
 			OccurredAt: now, NextReferenceAttemptAt: now.Add(referenceRetryDelay),
 		},
 	)
+	handler.metrics.ObserveProcessing("http", time.Since(startedAt))
 	if err != nil {
+		handler.metrics.RecordWagerResult("ERROR")
+		if errors.Is(err, application.ErrConcurrentWalletUpdate) {
+			handler.metrics.RecordConcurrencyConflict()
+		}
+		slog.Error("wager transaction failed",
+			"correlationId", observability.SafeLogValue(correlationID),
+			"transactionId", ids[0], "walletId", observability.SafeLogValue(payload.WalletID),
+			"providerId", observability.SafeLogValue(identity.ProviderID), "error", err)
 		handler.writeApplicationError(response, err)
 		return
 	}
+	handler.metrics.RecordWagerResult(string(result.Status))
+	if result.IdempotentReplay {
+		handler.metrics.RecordDuplicate("http")
+	}
+	slog.Info("wager transaction processed",
+		"correlationId", observability.SafeLogValue(correlationID),
+		"transactionId", result.TransactionID, "walletId", observability.SafeLogValue(payload.WalletID),
+		"providerId", observability.SafeLogValue(identity.ProviderID), "status", result.Status,
+		"idempotentReplay", result.IdempotentReplay)
 
 	httpStatus := statusForWagerTransactionResult(result.Status)
 	body := wagerTransactionResponse{

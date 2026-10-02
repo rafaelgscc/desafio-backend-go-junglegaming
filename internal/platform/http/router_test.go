@@ -28,7 +28,7 @@ func TestRouterRegistersOpenWalletRoute(t *testing.T) {
 		&executeWagerTransactionStub{},
 		time.Now(),
 	)
-	router := NewRouter(handler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
+	router := NewRouter(handler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t), newTestMetrics())
 
 	request := httptest.NewRequest(http.MethodGet, "/wallets", nil)
 	response := httptest.NewRecorder()
@@ -57,9 +57,9 @@ func TestRouterRegistersHealthRoutes(t *testing.T) {
 		&executeWagerTransactionStub{},
 		time.Now(),
 	)
-	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t), newTestMetrics())
 
-	for _, path := range []string{"/health/live", "/health/ready"} {
+	for _, path := range []string{"/health/live", "/health/ready", "/metrics"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, request)
@@ -88,7 +88,7 @@ func TestRouterRegistersWagerTransactionRoute(t *testing.T) {
 		&executeWagerTransactionStub{},
 		time.Now(),
 	)
-	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t), newTestMetrics())
 
 	request := httptest.NewRequest(http.MethodGet, "/wagering/transactions", nil)
 	response := httptest.NewRecorder()
@@ -113,7 +113,7 @@ func TestRouterProtectsBusinessRoutes(t *testing.T) {
 		t.Fatalf("NewHealthHandler() unexpected error: %v", err)
 	}
 	wagerHandler := newWagerTransactionHandlerForTest(t, &executeWagerTransactionStub{}, time.Now())
-	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t))
+	router := NewRouter(openWalletHandler, healthHandler, wagerHandler, &WageringQueryHandler{}, newRouterAuthMiddleware(t), newTestMetrics())
 
 	testCases := []struct {
 		name          string

@@ -264,6 +264,7 @@ func newWagerTransactionHandlerForTest(
 			"transaction-id", "ledger-id", "outcome-event-id", "balance-event-id", "correlation-id",
 		}},
 		fixedClock{now: now},
+		newTestMetrics(),
 	)
 	if err != nil {
 		t.Fatalf("NewWagerTransactionHandler() unexpected error: %v", err)

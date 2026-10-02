@@ -57,6 +57,7 @@ type SQSConfig struct {
 	WaitTime          time.Duration
 	VisibilityTimeout time.Duration
 	MaxMessages       int32
+	MaxReceiveCount   int
 }
 
 type OutboxConfig struct {
@@ -103,7 +104,8 @@ func LoadSQSConfig() (SQSConfig, error) {
 		Region: region, Endpoint: strings.TrimSpace(os.Getenv("SQS_ENDPOINT")),
 		QueueName: queueName, EventQueueName: eventQueueName,
 		ConsumerName: "wager-transactions", WorkerID: workerID,
-		WaitTime: 10 * time.Second, VisibilityTimeout: 30 * time.Second, MaxMessages: 10,
+		WaitTime: 10 * time.Second, VisibilityTimeout: 30 * time.Second,
+		MaxMessages: 10, MaxReceiveCount: 5,
 	}, nil
 }
 

@@ -52,7 +52,7 @@ func TestWageringQueryHandlerReturnsWallet(t *testing.T) {
 	now := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
 	balance, _ := domain.NewMoney("100.00", "BRL")
 	wallet, _ := domain.NewWallet("wallet-1", "player-1", balance, now)
-	handler, _ := NewWageringQueryHandler(&wageringQueryExecutorStub{wallet: wallet})
+	handler, _ := NewWageringQueryHandler(&wageringQueryExecutorStub{wallet: wallet}, newTestMetrics())
 	request := httptest.NewRequest(http.MethodGet, "/wallets/wallet-1", nil)
 	request.SetPathValue("walletId", "wallet-1")
 	response := httptest.NewRecorder()
@@ -66,7 +66,7 @@ func TestWageringQueryHandlerReturnsWallet(t *testing.T) {
 
 func TestWageringQueryHandlerRejectsProviderMismatch(t *testing.T) {
 	stub := &wageringQueryExecutorStub{}
-	handler, _ := NewWageringQueryHandler(stub)
+	handler, _ := NewWageringQueryHandler(stub, newTestMetrics())
 	request := httptest.NewRequest(http.MethodGet, "/providers/provider-b/wagering/transactions/external-1", nil)
 	request.SetPathValue("providerId", "provider-b")
 	request.SetPathValue("externalTransactionId", "external-1")

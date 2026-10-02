@@ -8,6 +8,7 @@ import (
 
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/application"
 	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/config"
+	"github.com/rafaelgscc/desafio-backend-go-junglegaming/internal/platform/observability"
 )
 
 type emptyPendingReferenceRepository struct {
@@ -59,7 +60,7 @@ func TestWorkerStartsPollsAndStops(t *testing.T) {
 	worker, err := NewWorker(useCase, config.ReferenceWorkerConfig{
 		WorkerID: "reference-1", BatchSize: 10, PollInterval: time.Millisecond,
 		LeaseDuration: time.Second, RetryBaseDelay: time.Minute, MaxAttempts: 5,
-	})
+	}, observability.NewMetrics())
 	if err != nil {
 		t.Fatal(err)
 	}

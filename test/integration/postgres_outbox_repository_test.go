@@ -156,9 +156,9 @@ func TestOutboxRepositoryAppendsIntegrationEvent(t *testing.T) {
 	if err := json.Unmarshal(payload, &decodedPayload); err != nil {
 		t.Fatalf("decode persisted payload: %v", err)
 	}
-	if decodedPayload["transaction_id"] != "transaction-1" ||
-		decodedPayload["provider_id"] != "provider-1" ||
-		decodedPayload["external_transaction_id"] != "external-1" ||
+	if decodedPayload["transactionId"] != "transaction-1" ||
+		decodedPayload["providerId"] != "provider-1" ||
+		decodedPayload["externalTransactionId"] != "external-1" ||
 		decodedPayload["kind"] != "BET" {
 		t.Fatalf("persisted payload has unexpected contract: %s", payload)
 	}
